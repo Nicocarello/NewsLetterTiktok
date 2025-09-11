@@ -9,7 +9,7 @@ jobs:
   run-scraper:
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # 👈 necesario para poder pushear cambios
+      contents: write   # necesario para hacer push de cambios
 
     steps:
       - name: Checkout repo
@@ -27,8 +27,9 @@ jobs:
 
       - name: Run scraper
         env:
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}   # tu token de Apify
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           NEWS_QUERY: "tiktok"
+          ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}   # opcional si lo guardaste como secret
         run: python scraper.py
 
       - name: Commit results
@@ -38,3 +39,10 @@ jobs:
           git add news_results.csv
           git commit -m "Update results [skip ci]" || echo "No changes"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref }}
+
+      - name: Send email
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python send_email.py
