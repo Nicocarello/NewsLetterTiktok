@@ -27,7 +27,7 @@ def run_scraper():
             "lr": "lang_es",
             "maxItems": 5000,
             "query": QUERY,
-            "time_period": "last_day",
+            "time_period": "last_hour",
         }
 
         print(f"[{datetime.now()}] Ejecutando {ACTOR_ID} para {country}...")
