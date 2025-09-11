@@ -8,7 +8,7 @@ APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 apify_client = ApifyClient(APIFY_TOKEN)
 
 # Actor de Google News (ejemplo, cámbialo por el que uses)
-ACTOR_ID = "apify/actor-google-news-scraper"
+ACTOR_ID = "easyapi/google-news-scraper"
 
 # Lista de países
 COUNTRIES = ["ar", "cl", "pe"]
