@@ -78,15 +78,16 @@ def format_news(df):
         snippet = safe_get(row, "snippet", "content", "text")
         link    = safe_get(row, "link", "url")
 
-        html_content += f"""
-        <p>
-            <b>{title}</b><br>
-            <i>{dateutc} - {source}</i><br>
-            {snippet}<br>
-            <a href="{link}">{link}</a>
-        </p>
-        <hr>
-        """"""
+        html_content += "\n".join([
+            "<p>",
+            f"  <b>{title}</b><br>",
+            f"  <i>{dateutc} - {source}</i><br>",
+            f"  {snippet}<br>",
+            f'  <a href="{link}">{link}</a>',
+            "</p>",
+            "<hr>"
+        ])
+
     return html_content
 
 
