@@ -69,25 +69,33 @@ def safe_get(row, *cols, default=""):
 
 
 def format_news(df):
-    """Convierte noticias en bloques HTML formateados (por país)."""
+    """Convierte noticias en bloques HTML formateados"""
     html_content = ""
     for _, row in df.iterrows():
-        title   = safe_get(row, "title", "headline")
-        dateutc = safe_get(row, "date_utc", "publishedAt", "publicationDate")
-        source  = safe_get(row, "source", "publisher", "site")
-        snippet = safe_get(row, "snippet", "content", "text")
-        link    = safe_get(row, "link", "url")
+        title = f"<b>{row.get('title', '')}</b>"
 
-        html_content += "\n".join([
-            "<p>",
-            f"  <b>{title}</b><br>",
-            f"  <i>{dateutc} - {source}</i><br>",
-            f"  {snippet}<br>",
-            f'  <a href="{link}">{link}</a>',
-            "</p>",
-            "<hr>"
-        ])
+        # 👉 Intentamos parsear date_utc
+        raw_date = row.get("date_utc", "")
+        try:
+            # Elimina 'Z' si existe y parsea como UTC
+            dt = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+            dateutc = dt.strftime("%Y.%m.%d %H:%M")
+        except Exception:
+            dateutc = raw_date  # si falla, mostrar tal cual
 
+        source = row.get("source", "")
+        snippet = row.get("snippet", "")
+        link = f"<a href='{row.get('link', '')}'>{row.get('link', '')}</a>"
+
+        html_content += f"""
+        <p>
+            {title}<br>
+            <i>{dateutc} - {source}</i><br>
+            {snippet}<br>
+            {link}
+        </p>
+        <hr>
+        """
     return html_content
 
 
