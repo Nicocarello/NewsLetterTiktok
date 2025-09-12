@@ -1,48 +1,48 @@
-# name: Run Scraper Hourly
+name: Run Scraper Hourly
 
-# on:
-#   schedule:
-#     - cron: "0 * * * *"   # corre cada hora en el minuto 0 (UTC)
-#   workflow_dispatch:        # permite correrlo manualmente desde GitHub
+on:
+  schedule:
+    - cron: "0 * * * *"   # corre cada hora en el minuto 0 (UTC)
+  workflow_dispatch:        # permite correrlo manualmente desde GitHub
 
-# jobs:
-#   run-scraper:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: write   # necesario para hacer push de cambios
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # necesario para hacer push de cambios
 
-#     steps:
-#       - name: Checkout repo
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-#       - name: Set up Python
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version: "3.11"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-#       - name: Install dependencies
-#         run: |
-#           python -m pip install --upgrade pip
-#           pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-#       - name: Run scraper
-#         env:
-#           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-#           NEWS_QUERY: "tiktok"
-#           ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}   # opcional si lo guardaste como secret
-#         run: python scraper.py
+      - name: Run scraper
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          NEWS_QUERY: "tiktok"
+          ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}   # opcional si lo guardaste como secret
+        run: python scraper.py
 
-#       - name: Commit results
-#         run: |
-#           git config --global user.name "github-actions"
-#           git config --global user.email "actions@github.com"
-#           git add news_results.csv
-#           git commit -m "Update results [skip ci]" || echo "No changes"
-#           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref }}
+      - name: Commit results
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add news_results.csv
+          git commit -m "Update results [skip ci]" || echo "No changes"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref }}
 
-#       - name: Send email
-#         env:
-#           EMAIL_USER: ${{ secrets.EMAIL_USER }}
-#           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-#           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-#         run: python send_email.py
+      - name: Send email
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python send_email.py
