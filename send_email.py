@@ -140,7 +140,7 @@ def send_email():
     MAX_PER_COUNTRY = int(os.getenv("MAX_PER_COUNTRY", "100"))
     grouped = df.groupby("country", sort=True)
 
-    body = f"<h2>Noticias recolectadas – {window_label}</h2>"
+    body = f"<h2>Noticias TikTok – {window_label}</h2>"
     for country, group in grouped:
         name, flag = COUNTRY_NAMES.get(country.lower(), (country.upper(), "🌎"))
         body += f"<h3>{flag} {name}</h3>"
