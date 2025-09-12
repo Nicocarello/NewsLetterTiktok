@@ -7,8 +7,8 @@ from datetime import datetime
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 apify_client = ApifyClient(APIFY_TOKEN)
 
-# Actor de Google News (ejemplo, cámbialo por el que uses)
-ACTOR_ID = "easyapi/google-news-scraper"
+# Actor de Google News (definido como secret en GitHub Actions)
+ACTOR_ID = os.getenv("ACTOR_ID", "easyapi/google-news-scraper")
 
 # Lista de países
 COUNTRIES = ["ar", "cl", "pe"]
