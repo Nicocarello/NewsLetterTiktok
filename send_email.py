@@ -114,7 +114,7 @@ def send_email():
         df["scraped_at"] = pd.to_datetime(df["scraped_at"], utc=True, errors="coerce")
         start_utc, end_utc = current_window_utc()
         df = df[(df["scraped_at"] >= start_utc) & (df["scraped_at"] < end_utc)].copy()
-        window_label = f"{start_utc.astimezone(ART).strftime('%Y-%m-%d %H:%M')}–{end_utc.astimezone(ART).strftime('%Y-%m-%d %H:%M')} ART"
+        window_label = f"{start_utc.astimezone(ART).strftime('%Y-%m-%d %H:%M')}–{end_utc.astimezone(ART).strftime('%Y-%m-%d %H:%M')}"
     else:
         print("⚠️ No existe la columna 'scraped_at'; se enviarán todas las filas.")
         window_label = "ventana no determinada"
