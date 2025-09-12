@@ -111,7 +111,6 @@ def send_email():
 
     # Filtrar por ventana temporal usando scraped_at
     if "scraped_at" in df.columns:
-        # Parseamos a datetime con timezone UTC
         df["scraped_at"] = pd.to_datetime(df["scraped_at"], utc=True, errors="coerce")
         start_utc, end_utc = current_window_utc()
         df = df[(df["scraped_at"] >= start_utc) & (df["scraped_at"] < end_utc)].copy()
@@ -130,13 +129,21 @@ def send_email():
     else:
         df.sort_values(["country", "scraped_at"], ascending=[True, False], inplace=True)
 
+    # Diccionario de países
+    COUNTRY_NAMES = {
+        "ar": "Argentina",
+        "cl": "Chile",
+        "pe": "Perú",
+    }
+
     # Armar cuerpo por país
     MAX_PER_COUNTRY = int(os.getenv("MAX_PER_COUNTRY", "100"))
     grouped = df.groupby("country", sort=True)
 
     body = f"<h2>Noticias recolectadas – {window_label}</h2>"
     for country, group in grouped:
-        body += f"<h3>🌎 {country.upper()}</h3>"
+        country_name = COUNTRY_NAMES.get(country.lower(), country.upper())
+        body += f"<h3>🌎 {country_name}</h3>"
         body += format_news(group.head(MAX_PER_COUNTRY))
 
     # Preparar mensaje
@@ -153,6 +160,7 @@ def send_email():
         server.sendmail(EMAIL_USER, to_list, msg.as_string())
 
     print(f"✅ Correo enviado ({window_label}).")
+
 
 
 if __name__ == "__main__":
