@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from apify_client import ApifyClient
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Inicializa cliente con tu token
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
@@ -15,6 +15,10 @@ COUNTRIES = ["ar", "cl", "pe"]
 QUERY = os.getenv("NEWS_QUERY", "tiktok")
 
 CSV_FILE = "news_results.csv"
+
+# Parámetros de limpieza
+DAYS_TO_KEEP = 7
+MAX_ROWS = 10000
 
 def run_scraper():
     all_dfs = []
@@ -52,21 +56,32 @@ def run_scraper():
         print("❌ No se obtuvieron resultados de ningún país.")
         return
 
-    # ...
+    # DataFrame con lo nuevo
     final_df = pd.concat(all_dfs, ignore_index=True)
-    
-    # ✅ Evitar repetir noticias ya vistas
     final_df.drop_duplicates(subset=["link"], inplace=True)
 
-
-    # Guardar CSV (append si existe)
+    # Si ya existe el CSV, concatenar con lo previo
     if os.path.exists(CSV_FILE):
-        final_df.to_csv(CSV_FILE, mode="a", header=False, index=False)
+        existing_df = pd.read_csv(CSV_FILE)
+        combined_df = pd.concat([existing_df, final_df], ignore_index=True)
     else:
-        final_df.to_csv(CSV_FILE, index=False)
+        combined_df = final_df
 
-    print(f"✅ Datos guardados en {CSV_FILE}")
+    # Convertir scraped_at a datetime para filtrar
+    combined_df["scraped_at"] = pd.to_datetime(combined_df["scraped_at"], errors="coerce")
 
+    # ✅ Mantener solo los últimos N días
+    cutoff = datetime.now() - timedelta(days=DAYS_TO_KEEP)
+    combined_df = combined_df[combined_df["scraped_at"] >= cutoff]
+
+    # ✅ Mantener un máximo de filas (las más recientes)
+    if len(combined_df) > MAX_ROWS:
+        combined_df = combined_df.sort_values("scraped_at").tail(MAX_ROWS)
+
+    # Guardar limpio
+    combined_df.to_csv(CSV_FILE, index=False)
+
+    print(f"✅ Datos guardados en {CSV_FILE} ({len(combined_df)} filas después de limpieza)")
 
 if __name__ == "__main__":
     run_scraper()
