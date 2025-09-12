@@ -3,7 +3,8 @@ import smtplib
 import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from datetime import datetime, timedelta, time, timezone
+from datetime import datetime, date, time, timedelta, timezone
+from zoneinfo import ZoneInfo  # Python 3.9+
 
 CSV_FILE = "news_results.csv"
 
@@ -13,95 +14,135 @@ SMTP_PORT = 587
 EMAIL_USER = os.getenv("EMAIL_USER")      # tu correo remitente
 EMAIL_PASS = os.getenv("EMAIL_PASS")      # tu password o app password
 EMAIL_TO = os.getenv("EMAIL_TO")          # destinatario(s), separados por coma
+NEWS_QUERY = os.getenv("NEWS_QUERY", "tiktok")
 
-df = pd.read_csv(CSV_FILE)
-if "scraped_at" not in df.columns:
-    print("⚠️ No existe columna scraped_at, no puedo filtrar por ventana.")
-else:
-    start_utc, end_utc = current_window_utc()
-    df["scraped_at"] = pd.to_datetime(df["scraped_at"], utc=True, errors="coerce")
-    df = df[(df["scraped_at"] >= start_utc) & (df["scraped_at"] < end_utc)].copy()
+# Zona horaria de Argentina
+ART = ZoneInfo("America/Argentina/Buenos_Aires")
+
+# Horas de corte locales (ART)
+CUTS_LOCAL = [time(8,0), time(12,0), time(15,0), time(18,0), time(20,0)]
 
 
-def get_time_window():
-    now = datetime.now(timezone.utc)  # usamos UTC para consistencia
-    today = now.date()
+def current_window_utc():
+    """
+    Devuelve (start_utc, end_utc) para la ventana vigente según horarios ART.
+    Reglas:
+      - 08:00 → desde ayer 20:00 hasta hoy 08:00
+      - 12:00 → 08:00–12:00
+      - 15:00 → 12:00–15:00
+      - 18:00 → 15:00–18:00
+      - 20:00 → 18:00–20:00
+    Si se corre antes de 08:00, toma la ventana de 20:00 (día anterior) a 08:00 (día actual).
+    """
+    now_local = datetime.now(ART)
+    today_local = now_local.date()
 
-    # horarios de corte (UTC, ajusta si necesitas otra zona horaria)
-    schedule = [
-        time(8, 0), time(12, 0), time(15, 0), time(18, 0), time(20, 0)
-    ]
-
-    # encontrar el horario de corte más cercano
-    current_cut = None
-    for t in reversed(schedule):
-        cut_dt = datetime.combine(today, t, tzinfo=timezone.utc)
-        if now >= cut_dt:
-            current_cut = cut_dt
+    # último corte alcanzado hoy
+    current_cut_local = None
+    for t in reversed(CUTS_LOCAL):
+        cut_dt = datetime.combine(today_local, t, tzinfo=ART)
+        if now_local >= cut_dt:
+            current_cut_local = cut_dt
             break
 
-    if current_cut is None:
-        # antes de las 08:00 → tomar desde ayer 20:00
-        start = datetime.combine(today - timedelta(days=1), time(20, 0), tzinfo=timezone.utc)
-        end = datetime.combine(today, time(8, 0), tzinfo=timezone.utc)
+    if current_cut_local is None:
+        # antes de las 08:00 ART → ayer 20:00 a hoy 08:00
+        start_local = datetime.combine(today_local - timedelta(days=1), time(20,0), tzinfo=ART)
+        end_local   = datetime.combine(today_local,                 time(8,0),  tzinfo=ART)
     else:
-        idx = schedule.index(current_cut.timetz())
+        idx = CUTS_LOCAL.index(current_cut_local.timetz())
         if idx == 0:
-            # caso especial: 08:00 → desde ayer 20:00
-            start = datetime.combine(today - timedelta(days=1), time(20, 0), tzinfo=timezone.utc)
+            # 08:00 ART → desde ayer 20:00
+            start_local = datetime.combine(today_local - timedelta(days=1), time(20,0), tzinfo=ART)
         else:
-            start = datetime.combine(today, schedule[idx - 1], tzinfo=timezone.utc)
-        end = current_cut
+            start_local = datetime.combine(today_local, CUTS_LOCAL[idx - 1], tzinfo=ART)
+        end_local = current_cut_local
 
-    return start.isoformat(), end.isoformat()
+    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+
+def safe_get(row, *cols, default=""):
+    for c in cols:
+        if c in row and pd.notna(row[c]):
+            return str(row[c])
+    return default
 
 
 def format_news(df):
-    """Convierte noticias en bloques HTML formateados"""
+    """Convierte noticias en bloques HTML formateados (por país)."""
     html_content = ""
     for _, row in df.iterrows():
-        title = f"<b>{row.get('title', '')}</b>"
-        date_source = f"{row.get('date_utc', '')} - {row.get('source', '')}"
-        snippet = row.get("snippet", "")
-        link = f"<a href='{row.get('link', '')}'>Ver noticia</a>"
+        title   = safe_get(row, "title", "headline")
+        dateutc = safe_get(row, "date_utc", "publishedAt", "publicationDate")
+        source  = safe_get(row, "source", "publisher", "site")
+        snippet = safe_get(row, "snippet", "content", "text")
+        link    = safe_get(row, "link", "url")
 
         html_content += f"""
         <p>
-            {title}<br>
-            <i>{date_source}</i><br>
+            <b>{title}</b><br>
+            <i>{dateutc} - {source}</i><br>
             {snippet}<br>
-            {link}
+            <a href="{link}">{link}</a>
         </p>
         <hr>
-        """
+        """"""
     return html_content
 
 
 def send_email():
-    # Cargar CSV
+    # Validaciones iniciales
     if not os.path.exists(CSV_FILE):
         print("⚠️ No existe el archivo de noticias.")
         return
 
+    to_list = [e.strip() for e in (EMAIL_TO or "").split(",") if e.strip()]
+    if not to_list:
+        print("⚠️ EMAIL_TO vacío. No se envía correo.")
+        return
+
+    # Cargar CSV
     df = pd.read_csv(CSV_FILE)
-    df.drop_duplicates(subset = 'link')
 
-    # Agrupar por país
-    grouped = df.groupby("country")
+    # Evitar duplicados por link (si existieran)
+    if "link" in df.columns:
+        df.drop_duplicates(subset=["link"], inplace=True)
 
-    # Construir cuerpo HTML
-    body = "<h2>Noticias recolectadas</h2>"
+    # Filtrar por ventana temporal usando scraped_at
+    if "scraped_at" in df.columns:
+        # Parseamos a datetime con timezone UTC
+        df["scraped_at"] = pd.to_datetime(df["scraped_at"], utc=True, errors="coerce")
+        start_utc, end_utc = current_window_utc()
+        df = df[(df["scraped_at"] >= start_utc) & (df["scraped_at"] < end_utc)].copy()
+        window_label = f"{start_utc.astimezone(ART).strftime('%Y-%m-%d %H:%M')}–{end_utc.astimezone(ART).strftime('%Y-%m-%d %H:%M')} ART"
+    else:
+        print("⚠️ No existe la columna 'scraped_at'; se enviarán todas las filas.")
+        window_label = "ventana no determinada"
+
+    if df.empty:
+        print("ℹ️ No hay noticias en la ventana definida. No se envía correo.")
+        return
+
+    # Ordenar por país y fecha si existe
+    if "date_utc" in df.columns:
+        df.sort_values(["country", "date_utc"], ascending=[True, False], inplace=True)
+    else:
+        df.sort_values(["country", "scraped_at"], ascending=[True, False], inplace=True)
+
+    # Armar cuerpo por país
+    MAX_PER_COUNTRY = int(os.getenv("MAX_PER_COUNTRY", "100"))
+    grouped = df.groupby("country", sort=True)
+
+    body = f"<h2>Noticias recolectadas – {window_label}</h2>"
     for country, group in grouped:
         body += f"<h3>🌎 {country.upper()}</h3>"
-        body += format_news(group)
+        body += format_news(group.head(MAX_PER_COUNTRY))
 
-    # Configurar mensaje
+    # Preparar mensaje
     msg = MIMEMultipart()
     msg["From"] = EMAIL_USER
-    ahora = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    to_list = [e.strip() for e in EMAIL_TO.split(",") if e.strip()]
     msg["To"] = ", ".join(to_list)
-    msg["Subject"] = f"Noticias TikTok por país – {ahora}"
+    msg["Subject"] = f"Noticias por país – '{NEWS_QUERY}' – {window_label}"
     msg.attach(MIMEText(body, "html"))
 
     # Enviar correo
@@ -110,7 +151,7 @@ def send_email():
         server.login(EMAIL_USER, EMAIL_PASS)
         server.sendmail(EMAIL_USER, to_list, msg.as_string())
 
-    print("✅ Correo enviado correctamente.")
+    print(f"✅ Correo enviado ({window_label}).")
 
 
 if __name__ == "__main__":
