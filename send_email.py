@@ -3,7 +3,7 @@ import smtplib
 import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from datetime import datetime
+from datetime import datetime, timedelta, time, timezone
 
 CSV_FILE = "news_results.csv"
 
@@ -13,6 +13,46 @@ SMTP_PORT = 587
 EMAIL_USER = os.getenv("EMAIL_USER")      # tu correo remitente
 EMAIL_PASS = os.getenv("EMAIL_PASS")      # tu password o app password
 EMAIL_TO = os.getenv("EMAIL_TO")          # destinatario(s), separados por coma
+
+df = pd.read_csv(CSV_FILE)
+if "scraped_at" not in df.columns:
+    print("⚠️ No existe columna scraped_at, no puedo filtrar por ventana.")
+else:
+    start, end = get_time_window()
+    df = df[(df["scraped_at"] >= start) & (df["scraped_at"] < end)].copy()
+
+
+def get_time_window():
+    now = datetime.now(timezone.utc)  # usamos UTC para consistencia
+    today = now.date()
+
+    # horarios de corte (UTC, ajusta si necesitas otra zona horaria)
+    schedule = [
+        time(8, 0), time(12, 0), time(15, 0), time(18, 0), time(20, 0)
+    ]
+
+    # encontrar el horario de corte más cercano
+    current_cut = None
+    for t in reversed(schedule):
+        cut_dt = datetime.combine(today, t, tzinfo=timezone.utc)
+        if now >= cut_dt:
+            current_cut = cut_dt
+            break
+
+    if current_cut is None:
+        # antes de las 08:00 → tomar desde ayer 20:00
+        start = datetime.combine(today - timedelta(days=1), time(20, 0), tzinfo=timezone.utc)
+        end = datetime.combine(today, time(8, 0), tzinfo=timezone.utc)
+    else:
+        idx = schedule.index(current_cut.timetz())
+        if idx == 0:
+            # caso especial: 08:00 → desde ayer 20:00
+            start = datetime.combine(today - timedelta(days=1), time(20, 0), tzinfo=timezone.utc)
+        else:
+            start = datetime.combine(today, schedule[idx - 1], tzinfo=timezone.utc)
+        end = current_cut
+
+    return start.isoformat(), end.isoformat()
 
 
 def format_news(df):
