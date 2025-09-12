@@ -43,6 +43,7 @@ def send_email():
         return
 
     df = pd.read_csv(CSV_FILE)
+    df.drop_duplicates(subset = 'link')
 
     # Agrupar por país
     grouped = df.groupby("country")
