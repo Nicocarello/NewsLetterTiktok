@@ -3,6 +3,7 @@ import smtplib
 import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from datetime import datetime
 
 CSV_FILE = "news_results.csv"
 
@@ -55,15 +56,17 @@ def send_email():
     # Configurar mensaje
     msg = MIMEMultipart()
     msg["From"] = EMAIL_USER
-    msg["To"] = EMAIL_TO
-    msg["Subject"] = "Noticias recolectadas por país"
+    ahora = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    to_list = [e.strip() for e in EMAIL_TO.split(",") if e.strip()]
+    msg["To"] = ", ".join(to_list)
+    msg["Subject"] = f"Noticias TikTok por país – {ahora}"
     msg.attach(MIMEText(body, "html"))
 
     # Enviar correo
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.starttls()
         server.login(EMAIL_USER, EMAIL_PASS)
-        server.send_message(msg)
+        server.sendmail(EMAIL_USER, to_list, msg.as_string())
 
     print("✅ Correo enviado correctamente.")
 
