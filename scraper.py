@@ -52,7 +52,12 @@ def run_scraper():
         print("❌ No se obtuvieron resultados de ningún país.")
         return
 
+    # ...
     final_df = pd.concat(all_dfs, ignore_index=True)
+    
+    # ✅ Evitar repetir noticias ya vistas
+    final_df.drop_duplicates(subset=["link"], inplace=True)
+
 
     # Guardar CSV (append si existe)
     if os.path.exists(CSV_FILE):
