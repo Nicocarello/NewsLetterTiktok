@@ -131,9 +131,9 @@ def send_email():
 
     # Diccionario de países
     COUNTRY_NAMES = {
-        "ar": "Argentina",
-        "cl": "Chile",
-        "pe": "Perú",
+        "ar": ("Argentina", "🇦🇷"),
+        "cl": ("Chile", "🇨🇱"),
+        "pe": ("Perú", "🇵🇪"),
     }
 
     # Armar cuerpo por país
@@ -142,8 +142,8 @@ def send_email():
 
     body = f"<h2>Noticias recolectadas – {window_label}</h2>"
     for country, group in grouped:
-        country_name = COUNTRY_NAMES.get(country.lower(), country.upper())
-        body += f"<h3>🌎 {country_name}</h3>"
+        name, flag = COUNTRY_NAMES.get(country.lower(), (country.upper(), "🌎"))
+        body += f"<h3>{flag} {name}</h3>"
         body += format_news(group.head(MAX_PER_COUNTRY))
 
     # Preparar mensaje
