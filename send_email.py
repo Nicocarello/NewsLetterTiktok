@@ -18,8 +18,9 @@ df = pd.read_csv(CSV_FILE)
 if "scraped_at" not in df.columns:
     print("⚠️ No existe columna scraped_at, no puedo filtrar por ventana.")
 else:
-    start, end = get_time_window()
-    df = df[(df["scraped_at"] >= start) & (df["scraped_at"] < end)].copy()
+    start_utc, end_utc = current_window_utc()
+    df["scraped_at"] = pd.to_datetime(df["scraped_at"], utc=True, errors="coerce")
+    df = df[(df["scraped_at"] >= start_utc) & (df["scraped_at"] < end_utc)].copy()
 
 
 def get_time_window():
