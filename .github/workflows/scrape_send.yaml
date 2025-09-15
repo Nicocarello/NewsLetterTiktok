@@ -35,5 +35,15 @@ jobs:
       - name: Ejecutar scraper
         run: python scraper.py
 
+        
+      - name: Commit results
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add news_results.csv
+          git commit -m "Update results [skip ci]" || echo "No changes"
+          git push
+
+
       - name: Enviar correo si corresponde
         run: python send_email.py
