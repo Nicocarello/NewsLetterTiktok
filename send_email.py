@@ -16,9 +16,14 @@ EMAIL_PASS = os.getenv("EMAIL_PASS")
 EMAIL_TO = os.getenv("EMAIL_TO")
 NEWS_QUERY = os.getenv("NEWS_QUERY", "tiktok")
 
-# Zona horaria
+# Zona horaria de Argentina
 ART = ZoneInfo("America/Argentina/Buenos_Aires")
-CUTS_LOCAL = [time(8,0), time(12,0), time(15,0), time(18,0), time(20,0)]
+
+# Horas habilitadas para enviar correo (hora ART)
+ALLOWED_HOURS = [9, 12, 15, 18]
+
+# Horas de corte locales para determinar ventanas
+CUTS_LOCAL = [time(9,0), time(12,0), time(15,0), time(18,0)]
 
 
 def current_window_utc():
@@ -33,12 +38,13 @@ def current_window_utc():
             break
 
     if current_cut_local is None:
-        start_local = datetime.combine(today_local - timedelta(days=1), time(20,0), tzinfo=ART)
-        end_local   = datetime.combine(today_local,                 time(8,0),  tzinfo=ART)
+        # antes de las 09:00 ART → desde ayer 18:00 hasta hoy 09:00
+        start_local = datetime.combine(today_local - timedelta(days=1), time(18,0), tzinfo=ART)
+        end_local   = datetime.combine(today_local, time(9,0), tzinfo=ART)
     else:
         idx = CUTS_LOCAL.index(current_cut_local.timetz())
         if idx == 0:
-            start_local = datetime.combine(today_local - timedelta(days=1), time(20,0), tzinfo=ART)
+            start_local = datetime.combine(today_local - timedelta(days=1), time(18,0), tzinfo=ART)
         else:
             start_local = datetime.combine(today_local, CUTS_LOCAL[idx - 1], tzinfo=ART)
         end_local = current_cut_local
@@ -77,7 +83,15 @@ def format_news(df):
 def send_email():
     print("🚀 Iniciando envío de email...")
 
-    # Verificar configuración
+    # Validar hora actual (ART)
+    now = datetime.now(ART)
+    current_hour = now.hour
+
+    if current_hour not in ALLOWED_HOURS:
+        print(f"🕒 Ahora son las {current_hour}h ART. No se envía correo.")
+        return
+
+    # Validaciones de secrets y archivo
     print("🛠️ EMAIL_USER:", EMAIL_USER)
     print("🛠️ EMAIL_TO:", EMAIL_TO)
     print("📁 Existe CSV:", os.path.exists(CSV_FILE))
