@@ -32,7 +32,7 @@ jobs:
         run: python scraper.py
 
       - name: Upload CSV artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: news-csv
           path: news_results.csv
