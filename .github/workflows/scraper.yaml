@@ -1,36 +1,38 @@
-# name: Run Scraper Hourly
+name: Run Scraper Hourly
 
-# on:
-#   schedule:
-#     - cron: "0 * * * *"   # cada hora (UTC)
-#   workflow_dispatch:
+on:
+  schedule:
+    - cron: "0 * * * *"   # cada hora en UTC
+  workflow_dispatch:
 
-# jobs:
-#   run-scraper:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: write
-#     steps:
-#       - name: Checkout repo
-#         uses: actions/checkout@v4
-#       - name: Set up Python
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version: "3.11"
-#       - name: Install dependencies
-#         run: |
-#           python -m pip install --upgrade pip
-#           pip install -r requirements.txt
-#       - name: Run scraper
-#         env:
-#           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-#           NEWS_QUERY: "tiktok"
-#           ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}
-#         run: python scraper.py
-#       - name: Commit results
-#         run: |
-#           git config --global user.name "github-actions"
-#           git config --global user.email "actions@github.com"
-#           git add news_results.csv
-#           git commit -m "Update results [skip ci]" || echo "No changes"
-#           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref }}
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+
+    env:
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}
+      NEWS_QUERY: "tiktok"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scraper
+        run: python scraper.py
+
+      - name: Upload CSV artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: news-csv
+          path: news_results.csv
