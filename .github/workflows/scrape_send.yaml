@@ -2,12 +2,14 @@ name: Scrape and Send News
 
 on:
   schedule:
-    - cron: "0 * * * *"  # Cada hora
+    - cron: "0 * * * *"  # Cada hora (UTC)
   workflow_dispatch:
 
 jobs:
-  scrape-and-maybe-email:
+  scrape-and-email:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     env:
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
@@ -19,10 +21,10 @@ jobs:
       MAX_PER_COUNTRY: "100"
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -35,15 +37,13 @@ jobs:
       - name: Ejecutar scraper
         run: python scraper.py
 
-        
       - name: Commit results
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add news_results.csv
           git commit -m "Update results [skip ci]" || echo "No changes"
-          git push
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref }}
 
-
-      - name: Enviar correo si corresponde
+      - name: Ejecutar envío de correo (si corresponde)
         run: python send_email.py
