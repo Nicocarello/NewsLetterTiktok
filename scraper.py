@@ -76,7 +76,7 @@ def run_scraper():
 
     # AHORA convertimos todas las fechas a la zona horaria de Argentina
     # Esto soluciona el error de comparación
-    combined_df["scraped_at"] = combined_df["scraped_at"].dt.tz_convert(TZ_ARGENTINA)
+    combined_df["scraped_at"] = combined_df["scraped_at"].dt.tz_localize(pytz.utc).dt.tz_convert(TZ_ARGENTINA)
 
     # ✅ Mantener solo los últimos N días
     cutoff = datetime.now(TZ_ARGENTINA) - timedelta(days=DAYS_TO_KEEP)
