@@ -80,6 +80,8 @@ final_df['date_utc'] = final_df['date_utc'].dt.strftime('%d/%m/%Y')
 final_df['sentiment'] = ''
 final_df['fecha_envio'] = ''
 final_df['tag'] = ''
+final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
+
 
 desired_columns = final_df[['fecha_envio', 'date_utc', 'country','title','link','source','snippet','tag','sentiment']].astype(str).values.tolist()
 rows_to_append = [row for row in desired_columns if row not in values]
