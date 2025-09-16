@@ -74,9 +74,12 @@ def run_scraper():
     # Convertir scraped_at a datetime para filtrar
     combined_df["scraped_at"] = pd.to_datetime(combined_df["scraped_at"], errors="coerce")
 
-    # AHORA convertimos todas las fechas a la zona horaria de Argentina
-    # Esto soluciona el error de comparación
-    combined_df["scraped_at"] = combined_df["scraped_at"].dt.tz_localize(pytz.utc).dt.tz_convert(TZ_ARGENTINA)
+    # SOLUCIÓN: Verificamos si la columna ya tiene una zona horaria
+    # Si la tiene, usamos tz_convert. Si no, usamos tz_localize y luego convertimos.
+    if combined_df["scraped_at"].dt.tz is None:
+        combined_df["scraped_at"] = combined_df["scraped_at"].dt.tz_localize(pytz.utc).dt.tz_convert(TZ_ARGENTINA)
+    else:
+        combined_df["scraped_at"] = combined_df["scraped_at"].dt.tz_convert(TZ_ARGENTINA)
 
     # ✅ Mantener solo los últimos N días
     cutoff = datetime.now(TZ_ARGENTINA) - timedelta(days=DAYS_TO_KEEP)
