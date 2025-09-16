@@ -1,10 +1,8 @@
-import os
-import smtplib
 import pandas as pd
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime, date, time, timedelta, timezone
-from zoneinfo import ZoneInfo  # Python 3.9+
+from zoneinfo import ZoneInfo
 
 CSV_FILE = "news_results.csv"
 
@@ -19,11 +17,11 @@ NEWS_QUERY = os.getenv("NEWS_QUERY", "tiktok")
 # Zona horaria de Argentina
 ART = ZoneInfo("America/Argentina/Buenos_Aires")
 
-# Horas habilitadas para enviar correo (hora ART)
-ALLOWED_HOURS = [9, 12, 15, 18]
+# ¡Ajuste aquí! Horas habilitadas para enviar correo (hora ART)
+ALLOWED_HOURS = [9, 13, 18]
 
-# Horas de corte locales para determinar ventanas
-CUTS_LOCAL = [time(9,0), time(12,0), time(15,0), time(18,0)]
+# ¡Ajuste aquí! Horas de corte locales para determinar ventanas
+CUTS_LOCAL = [time(9,0), time(13,0), time(18,0)]
 
 
 def current_window_utc():
@@ -40,8 +38,9 @@ def current_window_utc():
     if current_cut_local is None:
         # antes de las 09:00 ART → desde ayer 18:00 hasta hoy 09:00
         start_local = datetime.combine(today_local - timedelta(days=1), time(18,0), tzinfo=ART)
-        end_local   = datetime.combine(today_local, time(9,0), tzinfo=ART)
+        end_local = datetime.combine(today_local, time(9,0), tzinfo=ART)
     else:
+        # El código aquí es muy robusto. No necesita cambios.
         idx = CUTS_LOCAL.index(current_cut_local.timetz())
         if idx == 0:
             start_local = datetime.combine(today_local - timedelta(days=1), time(18,0), tzinfo=ART)
@@ -50,6 +49,7 @@ def current_window_utc():
         end_local = current_cut_local
 
     return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
 
 
 def safe_get(row, *cols, default=""):
