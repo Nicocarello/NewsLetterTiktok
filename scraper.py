@@ -5,6 +5,7 @@ import pandas as pd
 import os
 from apify_client import ApifyClient
 from datetime import datetime, timedelta
+import json
 import pytz # <-- Importamos la nueva biblioteca
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
