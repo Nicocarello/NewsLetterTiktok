@@ -24,4 +24,4 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: python main.py
+        run: python scraper.py
