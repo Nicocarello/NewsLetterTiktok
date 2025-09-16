@@ -72,8 +72,8 @@ final_df.drop_duplicates(subset=["link"], inplace=True)
 
 
 # Convert date_utc to ART timezone
-final_df['date_utc'] = pd.to_datetime(final_df['date_utc'])
-final_df['date_utc'] = final_df['date_utc'].dt.tz_localize('UTC').dt.tz_convert(TZ_ARGENTINA)
+final_df['date_utc'] = pd.to_datetime(final_df['date_utc'], utc=True).dt.tz_convert(TZ_ARGENTINA)
+
 
 # 'date_utc' to format dd/mm/yyyy
 final_df['date_utc'] = final_df['date_utc'].dt.strftime('%d/%m/%Y')
