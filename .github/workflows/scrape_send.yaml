@@ -31,8 +31,7 @@ jobs:
           python scraper.py
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-          ACTOR_ID: ${{ secrets.ACTOR_ID }}
-          NEWS_QUERY: "tiktok"
+          ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}
 
       - name: Commit and push new results
         uses: stefanzweifel/git-auto-commit-action@v5
