@@ -1,49 +1,43 @@
-# name: Scrape and Send News
+name: Newsletter Scraper
 
-# on:
-#   schedule:
-#     - cron: "0 * * * *"  # Cada hora (UTC)
-#   workflow_dispatch:
+on:
+  schedule:
+    # Este cron se ejecuta cada hora
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
-# jobs:
-#   scrape-and-email:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: write
+permissions:
+  contents: write
 
-#     env:
-#       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-#       ACTOR_ID: ${{ secrets.APIFY_ACTOR_ID }}
-#       EMAIL_USER: ${{ secrets.EMAIL_USER }}
-#       EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-#       EMAIL_TO: ${{ secrets.EMAIL_TO }}
-#       NEWS_QUERY: "tiktok"
-#       MAX_PER_COUNTRY: "100"
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-#     steps:
-#       - name: Checkout repo
-#         uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-#       - name: Set up Python
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
 
-#       - name: Instalar dependencias
-#         run: |
-#           python -m pip install --upgrade pip
-#           pip install -r requirements.txt
+      - name: Run scraper
+        run: |
+          python your_scraper_file_name.py
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          ACTOR_ID: ${{ secrets.ACTOR_ID }}
+          NEWS_QUERY: "tiktok"
 
-#       - name: Ejecutar scraper
-#         run: python scraper.py
-
-#       - name: Commit results
-#         run: |
-#           git config --global user.name "github-actions"
-#           git config --global user.email "actions@github.com"
-#           git add news_results.csv
-#           git commit -m "Update results [skip ci]" || echo "No changes"
-#           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:${{ github.ref }}
-
-#       - name: Ejecutar envío de correo (si corresponde)
-#         run: python send_email.py
+      - name: Commit and push new results
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "feat: Add new scraped news results"
+          file_pattern: "news_results.csv"
+          commit_author: "GitHub Actions <actions@github.com>"
+          skip_dirty_check: false
