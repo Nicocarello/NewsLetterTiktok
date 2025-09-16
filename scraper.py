@@ -82,8 +82,11 @@ final_df['fecha_envio'] = ''
 final_df['tag'] = ''
 final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
 
+#scraped_at to dd/mm/yyyy hh
+final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'])
+final_df['scraped_at'] = final_df['scraped_at'].dt.strftime('%d/%m/%Y %H:%M')
 
-desired_columns = final_df[['fecha_envio', 'date_utc', 'country','title','link','source','snippet','tag','sentiment']].astype(str).values.tolist()
+desired_columns = final_df[['fecha_envio', 'date_utc', 'country','title','link','source','snippet','tag','sentiment','scraped_at']].astype(str).values.tolist()
 rows_to_append = [row for row in desired_columns if row not in values]
 
 # Append rows to Google Sheet
