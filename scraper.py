@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from apify_client import ApifyClient
 from datetime import datetime, timedelta
+import pytz # <-- Importamos la nueva biblioteca
 
 # Inicializa cliente con tu token
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
@@ -19,6 +20,9 @@ CSV_FILE = "news_results.csv"
 # Parámetros de limpieza
 DAYS_TO_KEEP = 7
 MAX_ROWS = 10000
+
+# Definimos la zona horaria de Argentina
+TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
 
 def run_scraper():
     all_dfs = []
@@ -49,7 +53,8 @@ def run_scraper():
 
         df = pd.DataFrame(items)
         df["country"] = country
-        df["scraped_at"] = datetime.now().isoformat()
+        # Aquí es donde aplicamos la zona horaria de Argentina
+        df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
         all_dfs.append(df)
 
     if not all_dfs:
@@ -71,7 +76,7 @@ def run_scraper():
     combined_df["scraped_at"] = pd.to_datetime(combined_df["scraped_at"], errors="coerce")
 
     # ✅ Mantener solo los últimos N días
-    cutoff = datetime.now() - timedelta(days=DAYS_TO_KEEP)
+    cutoff = datetime.now(TZ_ARGENTINA) - timedelta(days=DAYS_TO_KEEP)
     combined_df = combined_df[combined_df["scraped_at"] >= cutoff]
 
     # ✅ Mantener un máximo de filas (las más recientes)
