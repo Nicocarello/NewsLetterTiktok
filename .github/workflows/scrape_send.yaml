@@ -28,7 +28,7 @@ jobs:
 
       - name: Run scraper
         run: |
-          python your_scraper_file_name.py
+          python scraper.py
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           ACTOR_ID: ${{ secrets.ACTOR_ID }}
