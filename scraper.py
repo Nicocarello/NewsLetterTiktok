@@ -8,18 +8,20 @@ from datetime import datetime, timedelta
 import pytz # <-- Importamos la nueva biblioteca
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-KEY = r"C:\Users\nico_\Downloads\newsletter_key.json"
+# Google credentials desde secret
+creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
 SPREADSHEET_ID = '1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14'
-creds = None
-creds = service_account.Credentials.from_service_account_file(KEY, scopes=SCOPES)
+
 
 service = build('sheets', 'v4', credentials=creds)
 sheet = service.spreadsheets()
 result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range="Data!A:J").execute()
 values = result.get('values', [])
-# Inicializa cliente con tu token
-APIFY_TOKEN = "apify_api_hD0nWvWvKugx4mK0IlzjxDq7R8b5As3PLYqt"
+
+# Apify token desde secret
+APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 apify_client = ApifyClient(APIFY_TOKEN)
 
 # Actor de Google News (definido como secret en GitHub Actions)
