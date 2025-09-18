@@ -66,23 +66,37 @@ def filter_by_window(df, now):
 
 
 
-def format_email(df, window_label):
-    """Arma el cuerpo del email agrupando por país"""
-    if df.empty:
-        return f"No se encontraron noticias para {window_label}."
+# Diccionario de banderas
+FLAG_EMOJIS = {
+    "Argentina": "🇦🇷",
+    "Chile": "🇨🇱",
+    "Peru": "🇵🇪"
+}
 
-    body = [f"Noticias recolectadas ({window_label}):\n"]
+def format_email_html(df, window_label):
+    if df.empty:
+        return f"<p>No news found for {window_label}.</p>"
+
+    body = [f"<h2>News collected ({window_label})</h2>"]
     for country, group in df.groupby("country"):
-        body.append(f"=== {country} ===")
+        flag = FLAG_EMOJIS.get(country, "")
+        body.append(f"<h3>{flag} {country}</h3>")
         for _, row in group.iterrows():
-            body.append(f"- {row['title']} ({row['source']})\n  {row['link']}")
-        body.append("")
+            body.append(
+                f"<p>"
+                f"<b>{row['title']}</b><br>"
+                f"{row['date_utc']} - {row['source']}<br>"
+                f"{row['snippet']}<br>"
+                f"<a href='{row['link']}' target='_blank'>{row['link']}</a>"
+                f"</p>"
+            )
     return "\n".join(body)
+
 
 
 def send_email(subject, body):
     """Envía el correo usando SMTP"""
-    msg = MIMEText(body, "plain", "utf-8")
+    msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
     msg["From"] = EMAIL_USER
     msg["To"] = ", ".join(RECIPIENTS)
@@ -106,8 +120,10 @@ if __name__ == "__main__":
         print("⚠️ No hay noticias en esta ventana.")
         exit(0)
 
-    body = format_email(filtered, window_label)
-    subject = f"Reporte de noticias ({window_label})"
+    body = format_email_html(filtered, window_label)
+    subject = f"News report ({window_label})"
+    send_email(subject, body)
+
 
     send_email(subject, body)
     print("✅ Email enviado correctamente.")
