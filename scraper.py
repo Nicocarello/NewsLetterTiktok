@@ -65,6 +65,7 @@ for country in COUNTRIES:
     all_dfs.append(df)
 if not all_dfs:
     print("❌ No se obtuvieron resultados de ningún país.")
+    exit(0)
     
 # DataFrame con lo nuevo
 final_df = pd.concat(all_dfs, ignore_index=True)
