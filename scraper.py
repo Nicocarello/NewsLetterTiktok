@@ -1,43 +1,38 @@
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import pandas as pd
 import os
 from apify_client import ApifyClient
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
-import pytz # <-- Importamos la nueva biblioteca
+import pytz
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
 # Google credentials desde secret
 creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
 SPREADSHEET_ID = '1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14'
 
-
 service = build('sheets', 'v4', credentials=creds)
 sheet = service.spreadsheets()
-result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range="Data!A:J").execute()
-values = result.get('values', [])
 
 # Apify token desde secret
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 apify_client = ApifyClient(APIFY_TOKEN)
 
-# Actor de Google News (definido como secret en GitHub Actions)
+# Actor de Google News
 ACTOR_ID = "easyapi/google-news-scraper"
 
 # Lista de países
 COUNTRIES = ["ar", "cl", "pe"]
 QUERY = "tiktok"
 
-
 # Definimos la zona horaria de Argentina
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
 
-
-
+# === Scraping con Apify ===
 all_dfs = []
 for country in COUNTRIES:
     run_input = {
@@ -63,40 +58,60 @@ for country in COUNTRIES:
     df["country"] = country
     df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
     all_dfs.append(df)
+
 if not all_dfs:
     print("❌ No se obtuvieron resultados de ningún país.")
     exit(0)
-    
-# DataFrame con lo nuevo
+
+# === DataFrame con lo nuevo ===
 final_df = pd.concat(all_dfs, ignore_index=True)
 final_df.drop_duplicates(subset=["link"], inplace=True)
 
-
-# Convert date_utc to ART timezone
+# Convertir fechas
 final_df['date_utc'] = pd.to_datetime(final_df['date_utc'], utc=True).dt.tz_convert(TZ_ARGENTINA)
-
-
-# 'date_utc' to format dd/mm/yyyy
 final_df['date_utc'] = final_df['date_utc'].dt.strftime('%d/%m/%Y')
-# Prepare data to append (convert DataFrame to list of lists, matching Google Sheets columns)
+
+# Columnas adicionales
 final_df['sentiment'] = ''
 final_df['fecha_envio'] = ''
 final_df['tag'] = ''
 final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
 
-#scraped_at to dd/mm/yyyy hh
+# Formato scraped_at
 final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'])
 final_df['scraped_at'] = final_df['scraped_at'].dt.strftime('%d/%m/%Y %H:%M')
 
-desired_columns = final_df[['fecha_envio', 'date_utc', 'country','title','link','source','snippet','tag','sentiment','scraped_at']].astype(str).values.tolist()
-rows_to_append = [row for row in desired_columns if row not in values]
+# Orden de columnas
+header = ['fecha_envio','date_utc','country','title','link','source','snippet','tag','sentiment','scraped_at']
+final_df = final_df[header]
 
-# Append rows to Google Sheet
-sheet.values().append(
+# === Leer registros existentes en la hoja ===
+result = sheet.values().get(
+    spreadsheetId=SPREADSHEET_ID,
+    range="Data!A:J"
+).execute()
+values = result.get("values", [])
+
+if values:
+    existing_df = pd.DataFrame(values[1:], columns=values[0])
+else:
+    existing_df = pd.DataFrame(columns=header)
+
+# === Concatenar y limpiar duplicados ===
+combined_df = pd.concat([existing_df, final_df], ignore_index=True)
+combined_df.drop_duplicates(subset=["link"], inplace=True)
+
+# === Sobrescribir hoja con datos limpios ===
+sheet.values().clear(
+    spreadsheetId=SPREADSHEET_ID,
+    range="Data!A:J"
+).execute()
+
+sheet.values().update(
     spreadsheetId=SPREADSHEET_ID,
     range="Data!A1",
     valueInputOption="RAW",
-    insertDataOption="INSERT_ROWS",
-    body={"values": rows_to_append}
+    body={"values": [header] + combined_df.astype(str).values.tolist()}
 ).execute()
 
+print("✅ Hoja actualizada sin duplicados.")
