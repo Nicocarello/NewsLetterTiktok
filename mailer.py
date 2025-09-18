@@ -41,26 +41,29 @@ def get_sheet_data():
 
 
 def filter_by_window(df, now):
-    """Filtra las noticias según la ventana horaria"""
-    df["scraped_at_dt"] = pd.to_datetime(df["scraped_at"], format="%d/%m/%Y %H:%M")
+    # Parse and localize scraped_at
+    df["scraped_at_dt"] = pd.to_datetime(
+        df["scraped_at"], format="%d/%m/%Y %H:%M"
+    ).dt.tz_localize(TZ_ARG)
 
-    if 7 <= now.hour < 9:   # alrededor de las 8
+    # Definir ventanas
+    if 7 <= now.hour < 9:
         start = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
         end = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        label = "18:00 (día anterior) - 08:00"
-    elif 12 <= now.hour < 14:  # alrededor de las 13
+        label = "18:00 (previous day) - 08:00"
+    elif 12 <= now.hour < 14:
         start = now.replace(hour=8, minute=0, second=0, microsecond=0)
         end = now.replace(hour=13, minute=0, second=0, microsecond=0)
         label = "08:00 - 13:00"
-    elif 17 <= now.hour < 19:  # alrededor de las 18
+    elif 17 <= now.hour < 19:
         start = now.replace(hour=13, minute=0, second=0, microsecond=0)
         end = now.replace(hour=18, minute=0, second=0, microsecond=0)
         label = "13:00 - 18:00"
     else:
-        print("⏰ No es hora de envío (8, 13 o 18).")
-        return pd.DataFrame(), "Fuera de horario"
+        return pd.DataFrame(), "Out of schedule"
 
     return df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)], label
+
 
 
 def format_email(df, window_label):
