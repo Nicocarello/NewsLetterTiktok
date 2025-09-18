@@ -1,102 +1,67 @@
-# 📰 Newsletter TikTok
+# 📰 NewsLetterTiktok
 
-Esta aplicación recolecta noticias desde Google News usando **Apify** y las envía por correo en horarios específicos del día. El flujo completo se ejecuta automáticamente con **GitHub Actions**, sin necesidad de servidores propios.
+Automated workflow to collect TikTok news, store them in Google Sheets, and send daily email digests.
 
------
+---
 
-## 🚀 Funcionalidades
+## 🚀 Features
 
-  * **Scraping de noticias** de Argentina 🇦🇷, Chile 🇨🇱 y Perú 🇵🇪.
-  * **Recolección cada hora**, acumulando resultados en `news_results.csv`.
-  * **Filtrado automático** para evitar duplicados.
-  * **Envío de correos** en horarios definidos (ART):
-      * **08:00** → noticias desde el día anterior 20:00 hasta 08:00.
-      * **12:00** → noticias entre 08:00 y 12:00.
-      * **15:00** → noticias entre 12:00 y 15:00.
-      * **18:00** → noticias entre 15:00 y 18:00.
-      * **20:00** → noticias entre 18:00 y 20:00.
-  * **Emails con formato HTML**:
-      * Título en **negrita**
-      * Fecha y medio
-      * Snippet de la noticia
-      * Enlace a la fuente
+* **Scraping**: Uses [Apify Google News actor](https://apify.com/easyapi/google-news-scraper) to fetch TikTok news in Argentina, Chile, and Peru.
+* **Google Sheets integration**: Results are appended and deduplicated by link.
+* **Email reports**:
 
------
+  * 08:00 → news between 18:00 (previous day) and 08:00.
+  * 13:00 → news between 08:00 and 13:00.
+  * 18:00 → news between 13:00 and 18:00.
+  * Grouped by country.
 
-## 📂 Estructura
+---
+
+## 📂 Structure
 
 ```
+scraper.py          # runs hourly, updates Google Sheets
+mailer.py           # sends digests at 08:00, 13:00, 18:00
+requirements.txt    # dependencies
 .github/workflows/
-├── scraper.yml 		  # Ejecuta el scraper cada hora
-└── send-email.yml 		  # Envía correos en horarios específicos
-scraper.py 			      # Scraper de noticias (Apify + Pandas)
-send_email.py 		    # Lógica de envío de correos con ventanas horarias
-requirements.txt 		  # Dependencias de Python
-news_results.csv 		  # Archivo acumulativo con noticias
+  ├── newsletter.yaml   # workflow for scraper
+  └── mailer.yaml       # workflow for mailer
 ```
 
------
+---
 
-## ⚙️ Configuración
+## 🔑 Setup
 
-### Clonar el repo
+Add these **GitHub Secrets**:
 
-```bash
-git clone https://github.com/<usuario>/NewsLetterTiktok.git
-cd NewsLetterTiktok
+* `GOOGLE_CREDENTIALS` → Google service account JSON
+* `APIFY_ACTOR_ID` → Apify actor ID
+* `APIFY_TOKEN` → Apify API token
+* `EMAIL_USER` → sender email (e.g. Gmail)
+* `EMAIL_PASS` → app password for the sender
+* `EMAIL_TO` → comma-separated recipients
+
+---
+
+## 🤖 Automation
+
+* **Scraper** runs hourly (`newsletter.yaml`).
+* **Mailer** runs at 08:00, 13:00, 18:00 AR time (`mailer.yaml`).
+
+---
+
+## 📧 Sample email
+
+```
+News (08:00 - 13:00)
+
+=== Argentina ===
+- TikTok strengthens controls (La Nación)
+  https://example.com/tiktok-argentina
+
+=== Chile ===
+- TikTok under scrutiny (El Mercurio)
+  https://example.com/tiktok-chile
 ```
 
-### Dependencias
-
-```bash
-pip install -r requirements.txt
-```
-
-### Secrets en GitHub Actions
-
-  * **APIFY\_TOKEN**: token de Apify.
-  * **APIFY\_ACTOR\_ID**: ID del actor de Apify (ej: `easyapi/google-news-scraper`).
-  * **EMAIL\_USER**: correo remitente (ej: Gmail).
-  * **EMAIL\_PASS**: contraseña de aplicación (App Password).
-  * **EMAIL\_TO**: destinatarios separados por comas.
-
-### Variables opcionales
-
-  * **NEWS\_QUERY**: palabra clave a buscar (por defecto "tiktok").
-  * **MAX\_PER\_COUNTRY**: máximo de noticias por país en el email (default: 100).
-
------
-
-## 🛠️ Cómo funciona
-
-### Scraper (`scraper.py`)
-
-  * Corre cada hora (`cron` en GitHub Actions).
-  * Guarda las noticias en `news_results.csv`.
-  * Añade metadatos (`country`, `scraped_at`).
-  * Deduplica por `link`.
-
-### Envío (`send_email.py`)
-
-  * Se ejecuta solo en los horarios definidos (08, 12, 15, 18, 20 ART).
-  * Filtra noticias de la ventana temporal correspondiente.
-  * Construye un email en HTML agrupado por país y lo envía.
-
------
-
-## 📧 Ejemplo de correo
-
-**Noticias recolectadas – 2025-09-11 08:00–12:00 ART**
-
-### 🇦🇷 Argentina
-
-**Título de la noticia**
-2025-09-11T09:32Z - Diario Ejemplo
-Resumen breve...
-[Ver noticia](https://www.google.com/search?q=https://example.com/noticia)
-
-### 🇨🇱 Chile
-
-...
-
------
+---
