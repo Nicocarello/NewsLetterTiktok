@@ -66,11 +66,11 @@ def filter_by_window(df, now):
 
 
 
-# Diccionario de banderas
-FLAG_EMOJIS = {
-    "Argentina": "🇦🇷",
-    "Chile": "🇨🇱",
-    "Peru": "🇵🇪"
+# Diccionario de imágenes de país
+COUNTRY_IMAGES = {
+    "Argentina": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/ARG.png",
+    "Chile": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/CHILE.png",
+    "Peru": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/PERU.png"
 }
 
 def format_email_html(df, window_label):
@@ -79,14 +79,22 @@ def format_email_html(df, window_label):
 
     body = [f"<h2>News collected ({window_label})</h2>"]
     for country, group in df.groupby("country"):
-        flag = FLAG_EMOJIS.get(country, "")
-        body.append(f"<h2 style='margin-top:20px'>{flag} {country}</h2>")
+        img_url = COUNTRY_IMAGES.get(country, "")
+        if img_url:
+            body.append(
+                f"<div style='margin-top:30px; margin-bottom:10px;'>"
+                f"<img src='{img_url}' alt='{country}' style='max-height:50px;'>"
+                f"</div>"
+            )
+        else:
+            body.append(f"<h2 style='margin-top:30px'>{country}</h2>")
+
         for _, row in group.iterrows():
             body.append(
-                f"<div style='margin-bottom:20px;'>"
+                f"<div style='margin-bottom:35px;'>"  # Espacio extra entre noticias
                 f"<h3 style='margin:0; font-size:18px;'><b>{row['title']}</b></h3>"
                 f"<p style='margin:0; font-size:13px; color:#555;'><i>{row['date_utc']} - {row['source']}</i></p>"
-                f"<p style='margin:5px 0; font-size:15px;'>{row['snippet']}</p>"
+                f"<p style='margin:5px 0; font-size:14px;'>{row['snippet']}</p>"
                 f"<a href='{row['link']}' target='_blank'>{row['link']}</a>"
                 f"</div>"
             )
