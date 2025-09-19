@@ -77,7 +77,15 @@ def format_email_html(df, window_label):
     if df.empty:
         return f"<p>No news found for {window_label}.</p>"
 
-    body = [f"<h2>News collected ({window_label})</h2>"]
+    body = [
+        # Imagen de cabecera
+        "<div style='margin-bottom:20px;'>"
+        "<img src='https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/cabezal.png' "
+        "alt='Header' style='max-width:100%; height:auto;'>"
+        "</div>",
+        f"<h2>News collected ({window_label})</h2>"
+    ]
+
     for country, group in df.groupby("country"):
         img_url = COUNTRY_IMAGES.get(country, "")
         if img_url:
@@ -91,7 +99,7 @@ def format_email_html(df, window_label):
 
         for _, row in group.iterrows():
             body.append(
-                f"<div style='margin-bottom:35px;'>"  # Espacio extra entre noticias
+                f"<div style='margin-bottom:35px;'>"
                 f"<h3 style='margin:0; font-size:18px;'><b>{row['title']}</b></h3>"
                 f"<p style='margin:0; font-size:13px; color:#555;'><i>{row['date_utc']} - {row['source']}</i></p>"
                 f"<p style='margin:5px 0; font-size:14px;'>{row['snippet']}</p>"
@@ -99,6 +107,7 @@ def format_email_html(df, window_label):
                 f"</div>"
             )
     return "\n".join(body)
+
 
 
 
