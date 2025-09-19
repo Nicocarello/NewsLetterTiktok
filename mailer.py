@@ -80,15 +80,15 @@ def format_email_html(df, window_label):
     body = [f"<h2>News collected ({window_label})</h2>"]
     for country, group in df.groupby("country"):
         flag = FLAG_EMOJIS.get(country, "")
-        body.append(f"<h3>{flag} {country}</h3>")
+        body.append(f"<h2 style='margin-top:20px'>{flag} {country}</h2>")
         for _, row in group.iterrows():
             body.append(
-                f"<p>"
-                f"<b>{row['title']}</b><br>"
-                f"{row['date_utc']} - {row['source']}<br>"
-                f"{row['snippet']}<br>"
+                f"<div style='margin-bottom:20px;'>"
+                f"<h3 style='margin:0; font-size:18px;'><b>{row['title']}</b></h3>"
+                f"<p style='margin:0; font-size:13px; color:#555;'><i>{row['date_utc']} - {row['source']}</i></p>"
+                f"<p style='margin:5px 0; font-size:15px;'>{row['snippet']}</p>"
                 f"<a href='{row['link']}' target='_blank'>{row['link']}</a>"
-                f"</p>"
+                f"</div>"
             )
     return "\n".join(body)
 
@@ -121,8 +121,7 @@ if __name__ == "__main__":
         exit(0)
 
     body = format_email_html(filtered, window_label)
-    subject = f"News report ({window_label})"
-    send_email(subject, body)
+    subject = f"Newsletter TikTok ({window_label})"
 
 
     send_email(subject, body)
