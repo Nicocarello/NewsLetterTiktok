@@ -29,37 +29,45 @@ ACTOR_ID = "easyapi/google-news-scraper"
 
 # Lista de países
 COUNTRIES = ["ar", "cl", "pe"]
-QUERY = "tiktok"
+QUERIES = ["tiktok", "tiktok suicidio", "tiktok grooming", "tiktok armas", "tiktok drogas", "tiktok violacion"]
 
 # Definimos la zona horaria de Argentina
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
 
 # === Scraping con Apify ===
 all_dfs = []
-for country in COUNTRIES:
-    run_input = {
-        "cr": country,
-        "gl": country,
-        "hl": "es-419",
-        "lr": "lang_es",
-        "maxItems": 5000,
-        "query": QUERY,
-        "time_period": "last_hour",
-    }
-    print(f"[{datetime.now()}] Ejecutando {ACTOR_ID} para {country}...")
-    run = apify_client.actor(ACTOR_ID).call(run_input=run_input)
-    dataset_id = run.get("defaultDatasetId")
-    if not dataset_id:
-        print(f"⚠️ No dataset generado para {country}")
-        continue
-    items = apify_client.dataset(dataset_id).list_items().items
-    if not items:
-        print(f"⚠️ No hay resultados para {country}")
-        continue
-    df = pd.DataFrame(items)
-    df["country"] = country
-    df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
-    all_dfs.append(df)
+for query in QUERIES:
+    for country in COUNTRIES:
+        run_input = {
+            "cr": country,
+            "gl": country,
+            "hl": "es-419",
+            "lr": "lang_es",
+            "maxItems": 5000,
+            "query": query,
+            "time_period": "last_hour",
+        }
+        print(f"[{datetime.now()}] Ejecutando {ACTOR_ID} para {country} con query '{query}'...")
+        try:
+            run = apify_client.actor(ACTOR_ID).call(run_input=run_input)
+        except Exception as e:
+            print(f"❌ Error al ejecutar actor para {country} con query '{query}': {e}")
+            continue
+
+        dataset_id = run.get("defaultDatasetId")
+        if not dataset_id:
+            print(f"⚠️ No dataset generado para {country} - '{query}'")
+            continue
+
+        items = apify_client.dataset(dataset_id).list_items().items
+        if not items:
+            print(f"⚠️ No hay resultados para {country} - '{query}'")
+            continue
+
+        df = pd.DataFrame(items)
+        df["country"] = country
+        df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
+        all_dfs.append(df)
 
 if not all_dfs:
     print("❌ No se obtuvieron resultados de ningún país.")
