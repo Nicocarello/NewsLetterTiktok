@@ -8,6 +8,7 @@ import json
 import pytz
 import requests
 from bs4 import BeautifulSoup
+import re
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
