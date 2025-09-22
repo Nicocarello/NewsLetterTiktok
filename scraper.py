@@ -6,6 +6,8 @@ from apify_client import ApifyClient
 from datetime import datetime
 import json
 import pytz
+import requests
+from bs4 import BeautifulSoup
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
@@ -80,6 +82,26 @@ final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chi
 # Formato scraped_at
 final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'])
 final_df['scraped_at'] = final_df['scraped_at'].dt.strftime('%d/%m/%Y %H:%M')
+
+
+
+def contiene_tiktok(url):
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            return False
+        soup = BeautifulSoup(response.content, "html.parser")
+        paragraphs = [p.get_text() for p in soup.find_all("p")]
+        texto = " ".join(paragraphs).lower()
+        return "tiktok" in texto
+    except Exception as e:
+        print(f"❌ Error al procesar {url}: {e}")
+        return False
+
+print("🔍 Filtrando noticias que realmente contienen 'tiktok' en el cuerpo...")
+final_df["contiene_tiktok"] = final_df["link"].apply(contiene_tiktok)
+final_df = final_df[final_df["contiene_tiktok"]].copy()
+final_df.drop(columns=["contiene_tiktok"], inplace=True)
 
 # Orden de columnas
 header = ['fecha_envio','date_utc','country','title','link','source','snippet','tag','sentiment','scraped_at']
