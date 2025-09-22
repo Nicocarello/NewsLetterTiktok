@@ -7,3 +7,4 @@ apify-client
 beautifulsoup4
 pytz
 requests
+re
