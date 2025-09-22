@@ -29,7 +29,7 @@ ACTOR_ID = "easyapi/google-news-scraper"
 
 # Lista de países
 COUNTRIES = ["ar", "cl", "pe"]
-QUERIES = ["tiktok", "tiktok suicidio", "tiktok grooming", "tiktok armas", "tiktok drogas", "tiktok violacion"]
+QUERIES = ["tik-tok", "tiktok", "tiktok suicidio", "tiktok grooming", "tiktok armas", "tiktok drogas", "tiktok violacion"]
 
 # Definimos la zona horaria de Argentina
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
@@ -95,13 +95,33 @@ final_df['scraped_at'] = final_df['scraped_at'].dt.strftime('%d/%m/%Y %H:%M')
 
 def contiene_tiktok(url):
     try:
-        response = requests.get(url, timeout=10)
+        # Un user-agent ayuda a evitar algunos 403
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        response = requests.get(url, timeout=10, headers=headers)
         if response.status_code != 200:
             return False
+
         soup = BeautifulSoup(response.content, "html.parser")
-        paragraphs = [p.get_text() for p in soup.find_all("p")]
-        texto = " ".join(paragraphs).lower()
-        return "tiktok" in texto
+
+        # Tomamos texto de párrafos y encabezados (suele aparecer en títulos)
+        textos = []
+        for tag in ("h1", "h2", "h3", "p"):
+            textos.extend(el.get_text(separator=" ", strip=True) for el in soup.find_all(tag))
+
+        texto = " ".join(textos).lower()
+
+        # Normalizamos guiones “especiales” a guion simple y colapsamos espacios
+        texto = re.sub(r'[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]', '-', texto)
+        texto = re.sub(r'\s+', ' ', texto)
+
+        # Coincide con: "tiktok", "tik tok" y "tik-tok"
+        patron = re.compile(r'\btik\s*-?\s*tok\b', re.IGNORECASE)
+
+        return bool(patron.search(texto))
+
     except Exception as e:
         print(f"❌ Error al procesar {url}: {e}")
         return False
