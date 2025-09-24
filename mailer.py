@@ -101,7 +101,7 @@ def format_email_html(df, window_label):
             body.append(
                 f"<div style='margin-bottom:35px;'>"
                 f"<h3 style='margin:0; font-size:18px;'><b>{row['title']}</b></h3>"
-                f"<p style='margin:0; font-size:13px; color:#555;'><i>{row['date_utc']} - {row['source']}</i></p>"
+                f"<p style='margin:0; font-size:13px; color:#555;'><i>{row['date_utc']} - {row['domain']}</i></p>"
                 f"<p style='margin:5px 0; font-size:14px;'>{row['snippet']}</p>"
                 f"<a href='{row['link']}' target='_blank'>{row['link']}</a>"
                 f"</div>"
