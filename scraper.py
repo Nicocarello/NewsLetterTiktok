@@ -133,7 +133,7 @@ final_df = final_df[final_df["contiene_tiktok"]].copy()
 final_df.drop(columns=["contiene_tiktok"], inplace=True)
 
 # Orden de columnas (Forma segura y robusta)
-header = ['fecha_envio','date_utc','country','title','link','source','snippet','tag','sentiment','scraped_at']
+header = ['fecha_envio','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
 
 # Reindexamos el DataFrame. Esto asegura que todas las columnas del 'header' existan.
 # Si una columna no existe en los datos originales, se creará y se rellenará con ''.
