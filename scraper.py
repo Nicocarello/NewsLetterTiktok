@@ -132,9 +132,12 @@ final_df["contiene_tiktok"] = final_df["link"].apply(contiene_tiktok)
 final_df = final_df[final_df["contiene_tiktok"]].copy()
 final_df.drop(columns=["contiene_tiktok"], inplace=True)
 
-# Orden de columnas
+# Orden de columnas (Forma segura y robusta)
 header = ['fecha_envio','date_utc','country','title','link','source','snippet','tag','sentiment','scraped_at']
-final_df = final_df[header]
+
+# Reindexamos el DataFrame. Esto asegura que todas las columnas del 'header' existan.
+# Si una columna no existe en los datos originales, se creará y se rellenará con ''.
+final_df = final_df.reindex(columns=header, fill_value='')
 
 # === Leer registros existentes en la hoja ===
 result = sheet.values().get(
