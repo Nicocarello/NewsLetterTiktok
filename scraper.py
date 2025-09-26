@@ -1,171 +1,308 @@
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
-import pandas as pd
 import os
-from apify_client import ApifyClient
-from datetime import datetime
 import json
+import time
+import math
+import random
+import logging
 import pytz
+import re
+from datetime import datetime
+from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import requests
 from bs4 import BeautifulSoup
-import re
+import pandas as pd
 
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
+from apify_client import ApifyClient
 
-# Google credentials desde secret
-creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
-creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
-SPREADSHEET_ID = '1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14'
+# --------------------------- Config --------------------------- #
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14")
+SHEET_RANGE = os.getenv("SHEET_RANGE", "Data!A:J")
 
-service = build('sheets', 'v4', credentials=creds)
-sheet = service.spreadsheets()
+# Comma-separated envs are supported; fall back to your hardcoded lists
+COUNTRIES = [c.strip() for c in os.getenv("COUNTRIES", "ar,cl,pe").split(",") if c.strip()]
+QUERIES = [q.strip() for q in os.getenv(
+    "QUERIES",
+    "tik-tok,tiktok,tiktok suicidio,tiktok grooming,tiktok armas,tiktok drogas,tiktok violacion"
+).split(",") if q.strip()]
 
-# Apify token desde secret
+# Apify Google News actor + window
+ACTOR_ID = os.getenv("APIFY_ACTOR_ID", "easyapi/google-news-scraper")
+TIME_PERIOD = os.getenv("TIME_PERIOD", "last_hour")   # e.g., last_hour, last_day
+MAX_ITEMS = int(os.getenv("MAX_ITEMS", "5000"))
+
+# Concurrency
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "12"))
+
+# Argentina timezone
+TZ_ARG = pytz.timezone("America/Argentina/Buenos_Aires")
+
+# Logging
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(message)s",
+)
+log = logging.getLogger("google_news_pipeline")
+
+# Google + Apify credentials
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
-apify_client = ApifyClient(APIFY_TOKEN)
 
-# Actor de Google News
-ACTOR_ID = "easyapi/google-news-scraper"
+if not GOOGLE_CREDENTIALS or not APIFY_TOKEN:
+    raise RuntimeError("Missing GOOGLE_CREDENTIALS or APIFY_TOKEN envs.")
 
-# Lista de países
-COUNTRIES = ["ar", "cl", "pe"]
-QUERIES = ["tik-tok", "tiktok", "tiktok suicidio", "tiktok grooming", "tiktok armas", "tiktok drogas", "tiktok violacion"]
+CREDS = service_account.Credentials.from_service_account_info(
+    json.loads(GOOGLE_CREDENTIALS), scopes=SCOPES
+)
 
-# Definimos la zona horaria de Argentina
-TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
+sheets = build("sheets", "v4", credentials=CREDS).spreadsheets()
+apify = ApifyClient(APIFY_TOKEN)
 
-# === Scraping con Apify ===
-all_dfs = []
-for query in QUERIES:
-    for country in COUNTRIES:
-        run_input = {
-            "cr": country,
-            "gl": country,
-            "hl": "es-419",
-            "lr": "lang_es",
-            "maxItems": 5000,
-            "query": query,
-            "time_period": "last_hour",
-        }
-        print(f"[{datetime.now()}] Ejecutando {ACTOR_ID} para {country} con query '{query}'...")
+COUNTRY_NAMES = {"ar": "Argentina", "cl": "Chile", "pe": "Peru"}
+
+# ----------------------- Retry Helpers ------------------------ #
+def backoff_sleep(attempt: int, base: float = 0.5, cap: float = 8.0) -> None:
+    # exponential backoff with jitter
+    sleep = min(cap, base * (2 ** attempt)) * (0.5 + random.random() / 2)
+    time.sleep(sleep)
+
+def with_retries(fn, *, tries=5, on=(Exception,), desc="op"):
+    for attempt in range(tries):
         try:
-            run = apify_client.actor(ACTOR_ID).call(run_input=run_input)
-        except Exception as e:
-            print(f"❌ Error al ejecutar actor para {country} con query '{query}': {e}")
-            continue
+            return fn()
+        except on as e:
+            if attempt == tries - 1:
+                log.error(json.dumps({"event": "retry_exhausted", "op": desc, "error": str(e)}))
+                raise
+            log.warning(json.dumps({"event": "retry", "op": desc, "attempt": attempt + 1, "error": str(e)}))
+            backoff_sleep(attempt)
 
-        dataset_id = run.get("defaultDatasetId")
-        if not dataset_id:
-            print(f"⚠️ No dataset generado para {country} - '{query}'")
-            continue
+# ---------------------- Utility Functions --------------------- #
+def now_arg_fmt():
+    return datetime.now(TZ_ARG).strftime("%d/%m/%Y %H:%M")
 
-        items = apify_client.dataset(dataset_id).list_items().items
-        if not items:
-            print(f"⚠️ No hay resultados para {country} - '{query}'")
-            continue
-
-        df = pd.DataFrame(items)
-        df["country"] = country
-        df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
-        all_dfs.append(df)
-
-if not all_dfs:
-    print("❌ No se obtuvieron resultados de ningún país.")
-    exit(0)
-
-# === DataFrame con lo nuevo ===
-final_df = pd.concat(all_dfs, ignore_index=True)
-final_df.drop_duplicates(subset=["link"], inplace=True)
-
-# Convertir fechas
-final_df['date_utc'] = pd.to_datetime(final_df['date_utc'], utc=True).dt.tz_convert(TZ_ARGENTINA)
-final_df['date_utc'] = final_df['date_utc'].dt.strftime('%d/%m/%Y')
-
-# Columnas adicionales
-final_df['sentiment'] = ''
-final_df['fecha_envio'] = ''
-final_df['tag'] = ''
-final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
-
-# Formato scraped_at
-final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'])
-final_df['scraped_at'] = final_df['scraped_at'].dt.strftime('%d/%m/%Y %H:%M')
-
-
-
-def contiene_tiktok(url):
+def to_arg_date(date_str):
     try:
-        # Un user-agent ayuda a evitar algunos 403
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        response = requests.get(url, timeout=10, headers=headers)
-        if response.status_code != 200:
+        # Apify returns ISO string (UTC). Normalize -> Buenos Aires -> dd/mm/YYYY
+        dt = pd.to_datetime(date_str, utc=True, errors="coerce")
+        if pd.isna(dt):
+            return ""
+        return dt.tz_convert(TZ_ARG).strftime("%d/%m/%Y")
+    except Exception:
+        return ""
+
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+TITLE_META_KEYS = [
+    ("meta", {"property": "og:title"}),
+    ("meta", {"name": "twitter:title"}),
+    ("title", {}),
+]
+DESC_META_KEYS = [
+    ("meta", {"property": "og:description"}),
+    ("meta", {"name": "description"}),
+    ("meta", {"name": "twitter:description"}),
+]
+
+TIKTOK_REGEX = re.compile(r"\btik\s*-?\s*tok\b", re.IGNORECASE)
+
+def extract_text_from_html(html: bytes) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    texts = []
+    # titles/descriptions can carry the keyword even if body is lazy-loaded
+    for tag, attrs in TITLE_META_KEYS + DESC_META_KEYS:
+        for el in soup.find_all(tag, attrs=attrs):
+            val = el.get("content") if tag == "meta" else el.get_text(separator=" ", strip=True)
+            if val:
+                texts.append(val)
+    for tag in ("h1", "h2", "h3", "p"):
+        texts.extend(el.get_text(separator=" ", strip=True) for el in soup.find_all(tag))
+    text = " ".join(texts).lower()
+    # normalize “weird dashes” and whitespace
+    text = re.sub(r"[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]", "-", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+def url_contains_tiktok(url: str, timeout=10) -> bool:
+    headers = {"User-Agent": UA, "Accept-Encoding": "gzip, deflate, br"}
+    def _fetch():
+        return requests.get(url, timeout=timeout, headers=headers, allow_redirects=True)
+    try:
+        resp = with_retries(_fetch, tries=3, on=(requests.RequestException,), desc="http_get")
+        if resp.status_code != 200 or not resp.content:
             return False
-
-        soup = BeautifulSoup(response.content, "html.parser")
-
-        # Tomamos texto de párrafos y encabezados (suele aparecer en títulos)
-        textos = []
-        for tag in ("h1", "h2", "h3", "p"):
-            textos.extend(el.get_text(separator=" ", strip=True) for el in soup.find_all(tag))
-
-        texto = " ".join(textos).lower()
-
-        # Normalizamos guiones “especiales” a guion simple y colapsamos espacios
-        texto = re.sub(r'[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]', '-', texto)
-        texto = re.sub(r'\s+', ' ', texto)
-
-        # Coincide con: "tiktok", "tik tok" y "tik-tok"
-        patron = re.compile(r'\btik\s*-?\s*tok\b', re.IGNORECASE)
-
-        return bool(patron.search(texto))
-
+        text = extract_text_from_html(resp.content)
+        return bool(TIKTOK_REGEX.search(text))
     except Exception as e:
-        print(f"❌ Error al procesar {url}: {e}")
+        log.warning(json.dumps({"event": "fetch_failed", "url": url, "error": str(e)}))
         return False
 
-print("🔍 Filtrando noticias que realmente contienen 'tiktok' en el cuerpo...")
-final_df["contiene_tiktok"] = final_df["link"].apply(contiene_tiktok)
-final_df = final_df[final_df["contiene_tiktok"]].copy()
-final_df.drop(columns=["contiene_tiktok"], inplace=True)
+def fetch_apify_items(query: str, country: str) -> list[dict]:
+    run_input = {
+        "cr": country,
+        "gl": country,
+        "hl": "es-419",
+        "lr": "lang_es",
+        "maxItems": MAX_ITEMS,
+        "query": query,
+        "time_period": TIME_PERIOD,
+    }
 
-# Orden de columnas (Forma segura y robusta)
-header = ['fecha_envio','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
+    def _run_actor():
+        return apify.actor(ACTOR_ID).call(run_input=run_input)
 
-# Reindexamos el DataFrame. Esto asegura que todas las columnas del 'header' existan.
-# Si una columna no existe en los datos originales, se creará y se rellenará con ''.
-final_df = final_df.reindex(columns=header, fill_value='')
+    log.info(json.dumps({"event": "apify_run_start", "actor": ACTOR_ID, "country": country, "query": query}))
+    run = with_retries(_run_actor, tries=4, desc="apify_actor_call")
+    dataset_id = run.get("defaultDatasetId")
+    if not dataset_id:
+        return []
 
-# === Leer registros existentes en la hoja ===
-result = sheet.values().get(
-    spreadsheetId=SPREADSHEET_ID,
-    range="Data!A:J"
-).execute()
-values = result.get("values", [])
+    # paginate through dataset in chunks
+    items = []
+    offset = 0
+    page = 0
+    PAGE_SIZE = 500  # Apify limit is typically up to 1000; use conservative size
+    while True:
+        def _list():
+            return apify.dataset(dataset_id).list_items(limit=PAGE_SIZE, offset=offset)
+        res = with_retries(_list, tries=4, desc="apify_list_items")
+        batch = res.items or []
+        items.extend(batch)
+        got = len(batch)
+        log.info(json.dumps({"event": "apify_page", "page": page, "got": got}))
+        if got < PAGE_SIZE:
+            break
+        page += 1
+        offset += PAGE_SIZE
+    return items
 
-if values:
-    existing_df = pd.DataFrame(values[1:], columns=values[0])
-else:
-    existing_df = pd.DataFrame(columns=header)
+def read_sheet_dataframe() -> pd.DataFrame:
+    def _get():
+        return sheets.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
+    result = with_retries(_get, tries=4, desc="sheets_get")
+    values = result.get("values", [])
+    if not values:
+        return pd.DataFrame(columns=["fecha_envio","date_utc","country","title","link","domain","snippet","tag","sentiment","scraped_at"])
+    header, rows = values[0], values[1:]
+    return pd.DataFrame(rows, columns=header)
 
-# === Concatenar y limpiar duplicados ===
-combined_df = pd.concat([existing_df, final_df], ignore_index=True)
-combined_df.drop_duplicates(subset=["link"], inplace=True)
+def ensure_header():
+    existing = read_sheet_dataframe()
+    if existing.empty:
+        header = ['fecha_envio','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
+        body = {"values": [header]}
+        def _update():
+            return sheets.values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=SHEET_RANGE.split("!")[0] + "!A1",
+                valueInputOption="RAW",
+                body=body
+            ).execute()
+        with_retries(_update, tries=4, desc="sheets_init_header")
 
-# === Sobrescribir hoja con datos limpios ===
-sheet.values().clear(
-    spreadsheetId=SPREADSHEET_ID,
-    range="Data!A:J"
-).execute()
+def append_rows(rows: list[list[str]]):
+    if not rows:
+        return
+    body = {"values": rows}
+    def _append():
+        return sheets.values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range=SHEET_RANGE,
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body=body
+        ).execute()
+    with_retries(_append, tries=4, desc="sheets_append")
 
-sheet.values().update(
-    spreadsheetId=SPREADSHEET_ID,
-    range="Data!A1",
-    valueInputOption="RAW",
-    body={"values": [header] + combined_df.astype(str).values.tolist()}
-).execute()
+# ------------------------- Main Flow -------------------------- #
+def main():
+    ensure_header()
+    existing_df = read_sheet_dataframe()
+    existing_links = set(existing_df["link"].tolist()) if "link" in existing_df.columns else set()
 
-print("✅ Hoja actualizada sin duplicados.")
+    all_rows = []
+    scraped_at = now_arg_fmt()
+
+    # Pull from Apify (serial by query/country to avoid rate spikes)
+    for query in QUERIES:
+        for country in COUNTRIES:
+            try:
+                items = fetch_apify_items(query, country)
+                if not items:
+                    continue
+                df = pd.DataFrame(items)
+
+                # Normalize & add columns
+                df["country"] = COUNTRY_NAMES.get(country, country)
+                df["scraped_at"] = scraped_at
+                df["tag"] = query
+                # Ensure columns exist
+                for col in ["title","link","domain","snippet","date_utc"]:
+                    if col not in df.columns:
+                        df[col] = ""
+
+                # Fill domain if missing
+                df["domain"] = df["domain"].fillna("").astype(str)
+                df.loc[df["domain"].eq(""), "domain"] = df["link"].apply(
+                    lambda u: urlparse(u).netloc if isinstance(u, str) and u else ""
+                )
+
+                # Convert/format dates
+                df["date_utc"] = df["date_utc"].apply(to_arg_date)
+
+                # Filter to entries we haven't already stored (avoid re-fetching pages)
+                df = df[~df["link"].isin(existing_links)].copy()
+                if df.empty:
+                    continue
+
+                # Body-text verification (concurrent)
+                urls = df["link"].tolist()
+                results = []
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+                    future_map = {pool.submit(url_contains_tiktok, u): u for u in urls}
+                    for fut in as_completed(future_map):
+                        u = future_map[fut]
+                        ok = False
+                        try:
+                            ok = fut.result()
+                        except Exception as e:
+                            log.warning(json.dumps({"event": "bodycheck_error", "url": u, "error": str(e)}))
+                        results.append((u, ok))
+
+                ok_urls = {u for u, ok in results if ok}
+                df = df[df["link"].isin(ok_urls)].copy()
+                if df.empty:
+                    continue
+
+                # Final shape / ensure required columns
+                df["sentiment"] = ""
+                df["fecha_envio"] = ""
+
+                header = ['fecha_envio','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
+                df = df.reindex(columns=header, fill_value="")
+
+                # Deduplicate within this batch by link
+                df = df.drop_duplicates(subset=["link"])
+
+                # Convert to rows and collect
+                rows = df.astype(str).values.tolist()
+                all_rows.extend(rows)
+
+            except Exception as e:
+                log.error(json.dumps({"event": "query_country_failed", "query": query, "country": country, "error": str(e)}))
+
+    # Append to sheet
+    append_rows(all_rows)
+    log.info(json.dumps({"event": "done", "appended_rows": len(all_rows)}))
+
+
+if __name__ == "__main__":
+    main()
