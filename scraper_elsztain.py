@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 # Pipeline Google News -> filtro contenido -> Google Sheets
 # Caso: "Eduardo Elsztain" solo en Argentina
+#
+# Requiere variables de entorno:
+# - GOOGLE_CREDENTIALS (JSON del service account con acceso a la Sheet)
+# - APIFY_TOKEN (token de Apify)
+#
+# Google Sheet columnas: date_utc, title, link, source, snippet, sentiment, scraped_at
 
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
@@ -27,17 +33,17 @@ log = logging.getLogger("elsztain-news")
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-# Credenciales de Google desde variable de entorno GOOGLE_CREDENTIALS (JSON)
+# Credenciales Google desde env GOOGLE_CREDENTIALS (JSON)
 creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
-# ID de la hoja
-SPREADSHEET_ID = '1DTMBII9byTfx9KU6M1QghhlU8abCRh8rKThcnaTbzpE'
+# ID de la hoja (mismo que usabas; cambiá si corresponde)
+SPREADSHEET_ID = '1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14'
 
 service = build('sheets', 'v4', credentials=creds)
 sheet = service.spreadsheets()
 
-# Token de Apify desde variable APIFY_TOKEN
+# Token Apify
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 apify_client = ApifyClient(APIFY_TOKEN)
 
@@ -46,13 +52,13 @@ ACTOR_ID = "easyapi/google-news-scraper"
 
 # Solo Argentina + queries sobre Eduardo Elsztain
 COUNTRIES = ["ar"]
-QUERIES = ['"eduardo elsztain"', "eduardo elsztain"]  # con y sin comillas; se puede sumar "elsztain"
+QUERIES = ['"eduardo elsztain"', "eduardo elsztain"]  # con y sin comillas
 
 # Zona horaria de Argentina
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
 
-# Columnas de salida
-HEADER = ['fecha_envio','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
+# Columnas de la nueva Sheet
+HEADER = ['date_utc', 'title', 'link', 'source', 'snippet', 'sentiment', 'scraped_at']
 
 # ---------------------------
 # Helpers
@@ -78,7 +84,7 @@ def normalize_text(s: str) -> str:
     s = re.sub(r'\s+', ' ', s)
     return s.lower()
 
-# Coincide con "eduardo elsztain" y también "elsztain" solo (por si el medio usa solo el apellido)
+# Coincide con "eduardo elsztain" y también "elsztain" solo
 PATRON_NOMBRE = re.compile(r'\beduardo\s+elsztain\b|\belsztain\b', re.IGNORECASE)
 
 # Session con retries/backoff
@@ -102,6 +108,18 @@ def contiene_elsztain(url: str) -> bool:
     except Exception as e:
         log.warning(f"Error al procesar {url}: {e}")
         return False
+
+def ensure_source_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Asegura columna 'source': usa 'source' si viene del actor; si no, renombra 'domain'; sino, parsea del link."""
+    if 'source' in df.columns and df['source'].notna().any():
+        return df
+    if 'domain' in df.columns:
+        df = df.rename(columns={'domain': 'source'})
+    else:
+        df['source'] = df.get('link', pd.Series(dtype=str)).apply(
+            lambda x: urlparse(x).netloc if isinstance(x, str) and x else ''
+        )
+    return df
 
 # ---------------------------
 # Scrape con Apify
@@ -137,14 +155,18 @@ for query in QUERIES:
 
         df = pd.DataFrame(items)
 
-        # Normalizaciones tempranas
+        # Normalizaciones tempranas + dedupe
         if 'link' not in df.columns:
             log.warning("Dataset sin columna 'link'; se omite.")
             continue
 
         df['link'] = df['link'].astype(str).map(canonical_url)
         df.drop_duplicates(subset=["link"], inplace=True)
-        df["country"] = country
+
+        # Aseguramos 'source'
+        df = ensure_source_column(df)
+
+        # Timestamp de scrape (AR) para salida final
         df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
 
         all_dfs.append(df)
@@ -165,13 +187,7 @@ mask = final_df['date_utc'].notna()
 final_df.loc[mask, 'date_utc'] = final_df.loc[mask, 'date_utc'].dt.tz_convert(TZ_ARGENTINA)
 final_df['date_utc'] = final_df['date_utc'].dt.strftime('%d/%m/%Y')
 
-# Campos extra
-final_df['sentiment'] = ''
-final_df['fecha_envio'] = ''
-final_df['tag'] = ''
-final_df['country'] = final_df['country'].map({'ar': 'Argentina'}).fillna(final_df['country'])
-
-# scraped_at uniforme
+# scraped_at uniforme (string local AR dd/mm/YYYY HH:MM)
 final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'], errors='coerce')
 final_df['scraped_at'] = final_df['scraped_at'].dt.tz_convert(TZ_ARGENTINA).dt.strftime('%d/%m/%Y %H:%M')
 
@@ -182,10 +198,9 @@ log.info("Filtrando noticias que realmente mencionan 'Eduardo Elsztain'...")
 links = final_df["link"].tolist()
 results = {}
 
-# Reducir trabajo redundante: si hay muy pocos, bajar max_workers
-max_workers = min(16, max(4, len(links)//5))
+max_workers = min(16, max(4, len(links)//5)) if len(links) > 10 else min(8, len(links) or 1)
 
-with ThreadPoolExecutor(max_workers=max_workers) as ex:
+with ThreadPoolExecutor(max_workers=max_workers or 1) as ex:
     future_to_url = {ex.submit(contiene_elsztain, u): u for u in links}
     for fut in as_completed(future_to_url):
         u = future_to_url[fut]
@@ -200,16 +215,19 @@ final_df = final_df[final_df["link"].map(results)].copy()
 
 if final_df.empty:
     log.warning("Tras el filtro de contenido, no quedaron resultados relevantes.")
-    # Igual escribimos headers si la hoja estaba vacía o salimos sin error
-    # (opcional: salir aquí)
-    # raise SystemExit(0)
 
 # ---------------------------
-# Orden y tipos de columnas
+# Asegurar columnas y tipos
 # ---------------------------
+# Si Apify trae 'title'/'snippet' con NaN, convertir a str; si faltan columnas, crearlas vacías
 for col in HEADER:
     if col not in final_df.columns:
         final_df[col] = ''
+
+# Renombrar a 'source' si viniera como 'domain' (por si quedó algún df sin normalizar)
+if 'domain' in final_df.columns and 'source' not in final_df.columns:
+    final_df.rename(columns={'domain': 'source'}, inplace=True)
+
 final_df = final_df.astype({c: str for c in final_df.columns})
 final_df = final_df.reindex(columns=HEADER, fill_value='')
 
@@ -219,7 +237,7 @@ final_df = final_df.reindex(columns=HEADER, fill_value='')
 log.info("Leyendo hoja existente...")
 result = sheet.values().get(
     spreadsheetId=SPREADSHEET_ID,
-    range="NOTICIAS!A:J"
+    range="Data!A:G"  # 7 columnas: A..G
 ).execute()
 values = result.get("values", [])
 
@@ -240,12 +258,12 @@ combined_df.drop_duplicates(subset=["link"], inplace=True)
 log.info("Escribiendo datos en Google Sheets...")
 sheet.values().clear(
     spreadsheetId=SPREADSHEET_ID,
-    range="Data!A:J"
+    range="NOTICIAS!A:G"
 ).execute()
 
 sheet.values().update(
     spreadsheetId=SPREADSHEET_ID,
-    range="Data!A1",
+    range="NOTICIAS!A1",
     valueInputOption="RAW",
     body={"values": [HEADER] + combined_df.astype(str).values.tolist()}
 ).execute()
