@@ -38,7 +38,7 @@ creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
 
 # ID de la hoja (mismo que usabas; cambiá si corresponde)
-SPREADSHEET_ID = '1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14'
+SPREADSHEET_ID = '1DTMBII9byTfx9KU6M1QghhlU8abCRh8rKThcnaTbzpE'
 
 service = build('sheets', 'v4', credentials=creds)
 sheet = service.spreadsheets()
