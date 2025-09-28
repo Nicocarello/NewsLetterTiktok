@@ -1,29 +1,35 @@
 # -*- coding: utf-8 -*-
-# Pipeline Google News -> filtro contenido -> Google Sheets
-# Caso: "Eduardo Elsztain" solo en Argentina
-#
-# Requiere variables de entorno:
-# - GOOGLE_CREDENTIALS (JSON del service account con acceso a la Sheet)
-# - APIFY_TOKEN (token de Apify)
-#
-# Google Sheet columnas: date_utc, title, link, source, snippet, sentiment, scraped_at
+"""
+Pipeline Google News -> filtro contenido -> Google Sheets
+Caso: "Eduardo Elsztain" solo en Argentina
 
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
-import pandas as pd
+Env vars requeridas:
+- GOOGLE_CREDENTIALS (JSON del service account con acceso a la Sheet)
+- APIFY_TOKEN (token de Apify)
+
+Google Sheet columnas (exactas):
+date_utc, title, link, source, snippet, sentiment, scraped_at
+"""
+from __future__ import annotations
+
+from typing import List, Dict
 import os
-from apify_client import ApifyClient
-from datetime import datetime
 import json
+import logging
+import re
+import unicodedata
+from datetime import datetime, timezone
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+
+import pandas as pd
 import pytz
 import requests
 from bs4 import BeautifulSoup
-import re
-import unicodedata
-import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter, Retry
-from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+
+from apify_client import ApifyClient
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 # ---------------------------
 # Configuración general
@@ -31,48 +37,73 @@ from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("elsztain-news")
 
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-# Credenciales Google desde env GOOGLE_CREDENTIALS (JSON)
-creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
-creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS")
+if not GOOGLE_CREDENTIALS:
+    raise RuntimeError("Falta GOOGLE_CREDENTIALS en variables de entorno.")
+try:
+    CREDS_DICT = json.loads(GOOGLE_CREDENTIALS)
+except json.JSONDecodeError as e:
+    raise RuntimeError("GOOGLE_CREDENTIALS no es JSON válido.") from e
 
-# ID de la hoja (mismo que usabas; cambiá si corresponde)
-SPREADSHEET_ID = '1DTMBII9byTfx9KU6M1QghhlU8abCRh8rKThcnaTbzpE'
+APIFY_TOKEN = os.getenv("APIFY_TOKEN")
+if not APIFY_TOKEN:
+    raise RuntimeError("Falta APIFY_TOKEN en variables de entorno.")
 
-service = build('sheets', 'v4', credentials=creds)
+creds = service_account.Credentials.from_service_account_info(CREDS_DICT, scopes=SCOPES)
+
+# IDs y constantes
+SPREADSHEET_ID = "1DTMBII9byTfx9KU6M1QghhlU8abCRh8rKThcnaTbzpE"
+SHEET_TAB = "NOTICIAS"
+HEADER = ["date_utc", "title", "link", "source", "snippet", "sentiment", "scraped_at"]
+
+# Google Sheets API
+service = build("sheets", "v4", credentials=creds, cache_discovery=False)
 sheet = service.spreadsheets()
 
-# Token Apify
-APIFY_TOKEN = os.getenv("APIFY_TOKEN")
+# Apify
 apify_client = ApifyClient(APIFY_TOKEN)
-
-# Actor de Google News
 ACTOR_ID = "easyapi/google-news-scraper"
 
-# Solo Argentina + queries sobre Eduardo Elsztain
+# Filtros
 COUNTRIES = ["ar"]
-QUERIES = ['"eduardo elsztain"', "eduardo elsztain"]  # con y sin comillas
+QUERIES = ['"eduardo elsztain"', "eduardo elsztain"]
 
 # Zona horaria de Argentina
-TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
+TZ_ARG = pytz.timezone("America/Argentina/Buenos_Aires")
 
-# Columnas de la nueva Sheet
-HEADER = ['date_utc', 'title', 'link', 'source', 'snippet', 'sentiment', 'scraped_at']
+# HTTP cliente con retries
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+session = requests.Session()
+retries = Retry(
+    total=3,
+    backoff_factor=0.6,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset(["GET", "HEAD"]),
+)
+session.mount("http://", HTTPAdapter(max_retries=retries))
+session.mount("https://", HTTPAdapter(max_retries=retries))
+DEFAULT_TIMEOUT = 12  # s
+MIN_HTML_BYTES = 256  # rechaza respuestas vacías
 
 # ---------------------------
 # Helpers
 # ---------------------------
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-
 def canonical_url(u: str) -> str:
     """Remueve parámetros de tracking para mejorar el dedupe."""
     try:
         p = urlparse(u)
-        q = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
-             if not k.lower().startswith(('utm_', 'fbclid', 'gclid'))]
-        return urlunparse((p.scheme, p.netloc, p.path, p.params, urlencode(q, doseq=True), ''))
+        q = [
+            (k, v)
+            for k, v in parse_qsl(p.query, keep_blank_values=True)
+            if not k.lower().startswith(("utm_", "fbclid", "gclid"))
+        ]
+        netloc = p.netloc.replace(":80", "").replace(":443", "")
+        return urlunparse((p.scheme, netloc, p.path or "/", p.params, urlencode(q, doseq=True), ""))
     except Exception:
         return u
 
@@ -80,59 +111,94 @@ def normalize_text(s: str) -> str:
     """Normaliza acentos/espacios/guiones para robustecer matching."""
     s = unicodedata.normalize("NFKD", s)
     s = "".join(c for c in s if not unicodedata.combining(c))
-    s = re.sub(r'[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D-]+', '-', s)  # guiones raros -> '-'
-    s = re.sub(r'\s+', ' ', s)
-    return s.lower()
+    s = re.sub(r"[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D-]+", "-", s)  # guiones raros -> '-'
+    s = re.sub(r"\s+", " ", s)
+    return s.lower().strip()
 
-# Coincide con "eduardo elsztain" y también "elsztain" solo
-PATRON_NOMBRE = re.compile(r'\beduardo\s+elsztain\b|\belsztain\b', re.IGNORECASE)
+PATRON_NOMBRE = re.compile(r"\beduardo\s+elsztain\b|\belsztain\b", re.IGNORECASE)
 
-# Session con retries/backoff
-session = requests.Session()
-retries = Retry(total=3, backoff_factor=0.6, status_forcelist=(429, 500, 502, 503, 504))
-session.mount("http://", HTTPAdapter(max_retries=retries))
-session.mount("https://", HTTPAdapter(max_retries=retries))
+def ensure_source_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Asegura columna 'source'."""
+    if "source" in df.columns and df["source"].notna().any():
+        return df
+    if "domain" in df.columns:
+        df = df.rename(columns={"domain": "source"})
+    else:
+        df["source"] = df.get("link", pd.Series(dtype=str)).apply(
+            lambda x: urlparse(x).netloc if isinstance(x, str) and x else ""
+        )
+    return df
 
-def contiene_elsztain(url: str) -> bool:
+def is_probably_html(url: str) -> bool:
+    """Evita PDFs/imagenes antes de descargar cuerpo completo."""
+    try:
+        head = session.head(url, timeout=DEFAULT_TIMEOUT, headers={"User-Agent": UA}, allow_redirects=True)
+        ctype = head.headers.get("Content-Type", "").lower()
+        if "text/html" in ctype or ctype == "":
+            return True
+        return False
+    except Exception:
+        # si falla HEAD, seguimos y dejamos que GET lo determine
+        return True
+
+def page_mentions_elsztain(url: str) -> bool:
     """Verifica que el cuerpo/título mencione a Eduardo Elsztain."""
     try:
-        resp = session.get(url, timeout=10, headers={"User-Agent": UA})
-        if resp.status_code != 200 or not resp.content:
+        if not is_probably_html(url):
             return False
+
+        resp = session.get(url, timeout=DEFAULT_TIMEOUT, headers={"User-Agent": UA})
+        if resp.status_code != 200:
+            return False
+        if not resp.content or len(resp.content) < MIN_HTML_BYTES:
+            return False
+
         soup = BeautifulSoup(resp.content, "html.parser")
-        textos = []
+
+        textos: List[str] = []
         for tag in ("title", "h1", "h2", "h3", "p"):
-            textos.extend(el.get_text(separator=" ", strip=True) for el in soup.find_all(tag))
-        texto = normalize_text(" ".join(textos))
-        return bool(PATRON_NOMBRE.search(texto))
+            for el in soup.find_all(tag):
+                textos.append(el.get_text(separator=" ", strip=True))
+
+        text = normalize_text(" ".join(textos))
+        return bool(PATRON_NOMBRE.search(text))
     except Exception as e:
         log.warning(f"Error al procesar {url}: {e}")
         return False
 
-def ensure_source_column(df: pd.DataFrame) -> pd.DataFrame:
-    """Asegura columna 'source': usa 'source' si viene del actor; si no, renombra 'domain'; sino, parsea del link."""
-    if 'source' in df.columns and df['source'].notna().any():
-        return df
-    if 'domain' in df.columns:
-        df = df.rename(columns={'domain': 'source'})
-    else:
-        df['source'] = df.get('link', pd.Series(dtype=str)).apply(
-            lambda x: urlparse(x).netloc if isinstance(x, str) and x else ''
-        )
-    return df
+def prefilter_row_mentions(row: pd.Series) -> bool:
+    """Prefiltro barato usando los campos del actor (sin salir a la web)."""
+    for col in ("title", "snippet"):
+        if col in row and isinstance(row[col], str) and row[col]:
+            if PATRON_NOMBRE.search(row[col]):
+                return True
+    return False
+
+def list_all_items(dataset_id: str, batch: int = 1000) -> List[dict]:
+    """Paginar datasets grandes de Apify."""
+    items: List[dict] = []
+    offset = 0
+    while True:
+        page = apify_client.dataset(dataset_id).list_items(limit=batch, offset=offset)
+        part = page.items or []
+        items.extend(part)
+        if len(part) < batch:
+            break
+        offset += batch
+    return items
 
 # ---------------------------
 # Scrape con Apify
 # ---------------------------
-all_dfs = []
+all_dfs: List[pd.DataFrame] = []
 for query in QUERIES:
     for country in COUNTRIES:
         run_input = {
-            "cr": country,           # Country restrict
-            "gl": country,           # Geolocalización
-            "hl": "es-419",          # UI language
-            "lr": "lang_es",         # Solo resultados en español
-            "maxItems": 300,         # suficiente para last_hour
+            "cr": country,
+            "gl": country,
+            "hl": "es-419",
+            "lr": "lang_es",
+            "maxItems": 300,
             "query": query,
             "time_period": "last_hour",
         }
@@ -148,26 +214,44 @@ for query in QUERIES:
             log.warning(f"Sin dataset para {country} - '{query}'")
             continue
 
-        items = apify_client.dataset(dataset_id).list_items().items
+        try:
+            items = list_all_items(dataset_id)
+        except Exception as e:
+            log.error(f"No se pudo listar dataset {dataset_id}: {e}")
+            continue
+
         if not items:
-            log.warning(f"Sin resultados para {country} - '{query}'")
+            log.info(f"Sin resultados para {country} - '{query}'")
             continue
 
         df = pd.DataFrame(items)
 
-        # Normalizaciones tempranas + dedupe
-        if 'link' not in df.columns:
+        if "link" not in df.columns:
             log.warning("Dataset sin columna 'link'; se omite.")
             continue
 
-        df['link'] = df['link'].astype(str).map(canonical_url)
+        # Normalizaciones + dedupe
+        df["link"] = df["link"].astype(str).map(canonical_url)
         df.drop_duplicates(subset=["link"], inplace=True)
 
-        # Aseguramos 'source'
+        # Asegurar "source"
         df = ensure_source_column(df)
 
-        # Timestamp de scrape (AR) para salida final
-        df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
+        # Timestamps
+        now_utc = datetime.now(timezone.utc)
+        # date_utc -> ISO UTC (si viene nulo, queda cadena vacía luego)
+        if "date_utc" in df.columns:
+            dt = pd.to_datetime(df["date_utc"], utc=True, errors="coerce")
+            df["date_utc"] = dt.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        else:
+            df["date_utc"] = ""
+
+        # scraped_at -> local AR dd/mm/YYYY HH:MM
+        df["scraped_at"] = now_utc.astimezone(TZ_ARG).strftime("%d/%m/%Y %H:%M")
+
+        # sentiment placeholder si no viene
+        if "sentiment" not in df.columns:
+            df["sentiment"] = ""
 
         all_dfs.append(df)
 
@@ -176,96 +260,99 @@ if not all_dfs:
     raise SystemExit(0)
 
 # ---------------------------
-# DataFrame combinado y fechas
+# DataFrame combinado y prefiltro
 # ---------------------------
 final_df = pd.concat(all_dfs, ignore_index=True)
 final_df.drop_duplicates(subset=["link"], inplace=True)
 
-# Parseo robusto de date_utc -> AR -> string dd/mm/YYYY
-final_df['date_utc'] = pd.to_datetime(final_df.get('date_utc', pd.Series(dtype=str)), utc=True, errors='coerce')
-mask = final_df['date_utc'].notna()
-final_df.loc[mask, 'date_utc'] = final_df.loc[mask, 'date_utc'].dt.tz_convert(TZ_ARGENTINA)
-final_df['date_utc'] = final_df['date_utc'].dt.strftime('%d/%m/%Y')
-
-# scraped_at uniforme (string local AR dd/mm/YYYY HH:MM)
-final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'], errors='coerce')
-final_df['scraped_at'] = final_df['scraped_at'].dt.tz_convert(TZ_ARGENTINA).dt.strftime('%d/%m/%Y %H:%M')
+# Prefiltro por título/snippet
+if not final_df.empty:
+    mask_pref = final_df.apply(prefilter_row_mentions, axis=1)
+    prefiltered = final_df[mask_pref].copy()
+    if prefiltered.empty:
+        prefiltered = final_df.copy()
+else:
+    prefiltered = final_df
 
 # ---------------------------
-# Filtro por contenido (paralelo)
+# Filtro por contenido (HTTP en paralelo)
 # ---------------------------
-log.info("Filtrando noticias que realmente mencionan 'Eduardo Elsztain'...")
-links = final_df["link"].tolist()
-results = {}
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-max_workers = min(16, max(4, len(links)//5)) if len(links) > 10 else min(8, len(links) or 1)
+links = prefiltered["link"].tolist()
+n = len(links)
+if n == 0:
+    log.warning("No hay links para verificar en sitio.")
+    filtered = prefiltered.copy()
+else:
+    max_workers = max(4, min(16, (n // 6) + 1))
+    log.info(f"Verificando contenido en sitio (threads={max_workers}, {n} urls)...")
 
-with ThreadPoolExecutor(max_workers=max_workers or 1) as ex:
-    future_to_url = {ex.submit(contiene_elsztain, u): u for u in links}
-    for fut in as_completed(future_to_url):
-        u = future_to_url[fut]
-        ok = False
-        try:
-            ok = fut.result()
-        except Exception as e:
-            log.warning(f"Future error {u}: {e}")
-        results[u] = ok
+    results: Dict[str, bool] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(page_mentions_elsztain, u): u for u in links}
+        for fut in as_completed(futures):
+            u = futures[fut]
+            ok = False
+            try:
+                ok = fut.result()
+            except Exception as e:
+                log.warning(f"Future error {u}: {e}")
+            results[u] = ok
 
-final_df = final_df[final_df["link"].map(results)].copy()
+    filtered = prefiltered[prefiltered["link"].map(results).fillna(False)].copy()
 
-if final_df.empty:
+if filtered.empty:
     log.warning("Tras el filtro de contenido, no quedaron resultados relevantes.")
 
 # ---------------------------
-# Asegurar columnas y tipos
+# Asegurar columnas, tipos y orden final (exactamente 7)
 # ---------------------------
-# Si Apify trae 'title'/'snippet' con NaN, convertir a str; si faltan columnas, crearlas vacías
 for col in HEADER:
-    if col not in final_df.columns:
-        final_df[col] = ''
-
-# Renombrar a 'source' si viniera como 'domain' (por si quedó algún df sin normalizar)
-if 'domain' in final_df.columns and 'source' not in final_df.columns:
-    final_df.rename(columns={'domain': 'source'}, inplace=True)
-
-final_df = final_df.astype({c: str for c in final_df.columns})
-final_df = final_df.reindex(columns=HEADER, fill_value='')
+    if col not in filtered.columns:
+        filtered[col] = ""
+final_out = filtered.astype({c: str for c in filtered.columns}).reindex(columns=HEADER, fill_value="")
 
 # ---------------------------
-# Leer hoja existente
+# Leer hoja existente y crear headers si falta
 # ---------------------------
-log.info("Leyendo hoja existente...")
-result = sheet.values().get(
-    spreadsheetId=SPREADSHEET_ID,
-    range="Data!A:G"  # 7 columnas: A..G
-).execute()
-values = result.get("values", [])
+read_range = f"{SHEET_TAB}!A:G"
+log.info(f"Leyendo hoja existente: {read_range} ...")
+try:
+    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=read_range).execute()
+    values = result.get("values", [])
+except Exception as e:
+    log.warning(f"No se pudo leer la hoja (se asumirá vacía): {e}")
+    values = []
 
-if values:
-    existing_df = pd.DataFrame(values[1:], columns=values[0])
-else:
+if not values:
+    log.info("Hoja vacía, creando encabezados...")
+    sheet.values().update(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{SHEET_TAB}!A1",
+        valueInputOption="RAW",
+        body={"values": [HEADER]},
+    ).execute()
     existing_df = pd.DataFrame(columns=HEADER)
+else:
+    existing_df = pd.DataFrame(values[1:], columns=values[0])
 
 # ---------------------------
-# Concatenar y deduplicar por link
+# Append SOLO filas nuevas (por link)
 # ---------------------------
-combined_df = pd.concat([existing_df, final_df], ignore_index=True)
-combined_df.drop_duplicates(subset=["link"], inplace=True)
+if existing_df.empty:
+    new_rows = final_out
+else:
+    new_rows = final_out.loc[~final_out["link"].isin(existing_df["link"])]
 
-# ---------------------------
-# Escribir a Google Sheets
-# ---------------------------
-log.info("Escribiendo datos en Google Sheets...")
-sheet.values().clear(
-    spreadsheetId=SPREADSHEET_ID,
-    range="NOTICIAS!A:G"
-).execute()
-
-sheet.values().update(
-    spreadsheetId=SPREADSHEET_ID,
-    range="NOTICIAS!A1",
-    valueInputOption="RAW",
-    body={"values": [HEADER] + combined_df.astype(str).values.tolist()}
-).execute()
-
-log.info("✅ Hoja actualizada sin duplicados.")
+if not new_rows.empty:
+    log.info(f"Agregando {len(new_rows)} filas nuevas...")
+    sheet.values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{SHEET_TAB}!A1",
+        valueInputOption="RAW",
+        insertDataOption="INSERT_ROWS",
+        body={"values": new_rows.astype(str).values.tolist()},
+    ).execute()
+else:
+    log.info("No hay filas nuevas para agreg
