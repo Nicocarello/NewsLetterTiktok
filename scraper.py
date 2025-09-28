@@ -92,45 +92,7 @@ final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chi
 final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'])
 final_df['scraped_at'] = final_df['scraped_at'].dt.strftime('%d/%m/%Y %H:%M')
 
-
-
-def contiene_tiktok(url):
-    try:
-        # Un user-agent ayuda a evitar algunos 403
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        response = requests.get(url, timeout=10, headers=headers)
-        if response.status_code != 200:
-            return False
-
-        soup = BeautifulSoup(response.content, "html.parser")
-
-        # Tomamos texto de párrafos y encabezados (suele aparecer en títulos)
-        textos = []
-        for tag in ("h1", "h2", "h3", "p"):
-            textos.extend(el.get_text(separator=" ", strip=True) for el in soup.find_all(tag))
-
-        texto = " ".join(textos).lower()
-
-        # Normalizamos guiones “especiales” a guion simple y colapsamos espacios
-        texto = re.sub(r'[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]', '-', texto)
-        texto = re.sub(r'\s+', ' ', texto)
-
-        # Coincide con: "tiktok", "tik tok" y "tik-tok"
-        patron = re.compile(r'\btik\s*-?\s*tok\b', re.IGNORECASE)
-
-        return bool(patron.search(texto))
-
-    except Exception as e:
-        print(f"❌ Error al procesar {url}: {e}")
-        return False
-
-print("🔍 Filtrando noticias que realmente contienen 'tiktok' en el cuerpo...")
-final_df["contiene_tiktok"] = final_df["link"].apply(contiene_tiktok)
-final_df = final_df[final_df["contiene_tiktok"]].copy()
-final_df.drop(columns=["contiene_tiktok"], inplace=True)
+final_df = final_df[final_df['title'].str.contains('tiktok|tik tok|tik-tok|tik - tok', case=False, na=False) | final_df['snippet'].str.contains('tiktok|tik tok|tik-tok|tik - tok', case=False, na=False)]
 
 # Orden de columnas (Forma segura y robusta)
 header = ['fecha_envio','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
