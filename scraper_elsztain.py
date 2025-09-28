@@ -355,4 +355,4 @@ if not new_rows.empty:
         body={"values": new_rows.astype(str).values.tolist()},
     ).execute()
 else:
-    log.info("No hay filas nuevas para agreg
+    log.info("No hay filas nuevas para agregar.")
