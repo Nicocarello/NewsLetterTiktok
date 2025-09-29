@@ -200,7 +200,7 @@ for query in QUERIES:
             "lr": "lang_es",
             "maxItems": 300,
             "query": query,
-            "time_period": "last_hour",
+            "time_period": "last_year",
         }
         log.info(f"Ejecutando {ACTOR_ID} para {country} con query '{query}'...")
         try:
