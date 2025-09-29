@@ -379,7 +379,8 @@ def run_apify_queries(queries: List[str], countries: List[str]) -> List[pd.DataF
             now_utc = datetime.now(timezone.utc)
             if "date_utc" in df.columns:
                 dt = pd.to_datetime(df["date_utc"], utc=True, errors="coerce")
-                df["date_utc"] = dt.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                # Formato dd/mm/YYYY
+                df["date_utc"] = dt.dt.strftime("%d/%m/%Y")
             else:
                 df["date_utc"] = ""
 
