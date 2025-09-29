@@ -1,0 +1,42 @@
+name: Send News Emails Elsztain
+
+on:
+  schedule:
+    # GitHub Actions usa UTC. Estos disparos equivalen a 08:00, 13:00 y 18:00 en Buenos Aires (UTC−3).
+    - cron: "0 11 * * *"   # 08:00 Buenos Aires (UTC−3)
+    - cron: "0 16 * * *"   # 13:00 Buenos Aires
+    - cron: "0 21 * * *"   # 18:00 Buenos Aires
+  workflow_dispatch:
+
+concurrency:
+  group: mailer-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mailer:
+    runs-on: ubuntu-latest
+    env:
+      TZ: America/Argentina/Buenos_Aires   # para timestamps de logs del runner
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'                     # cache de pip basado en requirements.txt
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run mailer.py
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO_ELSZTAIN }}
+        run: python mailer_elsztain.py
