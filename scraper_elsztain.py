@@ -269,11 +269,11 @@ from time import sleep
 SENTIMENT_LABELS = {"POSITIVO", "NEGATIVO", "NEUTRO"}
 SENT_PROMPT_TMPL = (
     "Eres un clasificador de sentimiento estricto. "
-    "Clasifica el sentimiento hacia la figura de 'Eduardo Elsztain' en el texto. "
+    "Clasifica el sentimiento hacia la figura de 'Eduardo Elsztain' o a la empresa IRSA o los proyectos de la empresa en el texto."
     "Devuelve SOLO una de estas palabras EXACTAS: POSITIVO, NEGATIVO, NEUTRO.\n\n"
     "Criterios:\n"
     "- POSITIVO: logros, apoyo, impacto favorable, mejoras atribuidas a él.\n"
-    "- NEGATIVO: críticas, controversias, pérdidas, impacto desfavorable atribuible a él.\n"
+    "- NEGATIVO: críticas, controversias, pérdidas, impacto desfavorable a él, antisemitismo.\n"
     "- NEUTRO: informativo/descriptivo sin carga valorativa clara.\n\n"
     "Texto:\n{texto}"
 )
