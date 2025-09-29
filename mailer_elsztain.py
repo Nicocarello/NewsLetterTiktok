@@ -28,7 +28,7 @@ sheet = service.spreadsheets()
 # === Configuración Email (Gmail SMTP) ===
 EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
-RECIPIENTS = [e.strip() for e in os.getenv("EMAIL_TO", "").split(",") if e.strip()]
+RECIPIENTS = [e.strip() for e in os.getenv("EMAIL_TO_ELSZTAIN", "").split(",") if e.strip()]
 
 # Zona horaria
 TZ_ARG = pytz.timezone("America/Argentina/Buenos_Aires")
