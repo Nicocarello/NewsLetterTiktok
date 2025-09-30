@@ -92,8 +92,6 @@ final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chi
 final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'])
 final_df['scraped_at'] = final_df['scraped_at'].dt.strftime('%d/%m/%Y %H:%M')
 
-final_df = final_df[final_df['title'].str.contains('tiktok|tik tok|tik-tok|tik - tok', case=False, na=False) | final_df['snippet'].str.contains('tiktok|tik tok|tik-tok|tik - tok', case=False, na=False)]
-
 # Orden de columnas (Forma segura y robusta)
 header = ['fecha_envio','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
 
