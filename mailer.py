@@ -41,26 +41,15 @@ def get_sheet_data():
 
 
 def filter_by_window(df, now):
-    # Parse and localize scraped_at
+    # Parse y localiza scraped_at
     df["scraped_at_dt"] = pd.to_datetime(
         df["scraped_at"], format="%d/%m/%Y %H:%M"
     ).dt.tz_localize(TZ_ARG)
 
-    # Definir ventanas
-    if 7 <= now.hour < 9:
-        start = (now - timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
-        end = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        label = "18:00 (previous day) - 08:00"
-    elif 12 <= now.hour < 14:
-        start = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        end = now.replace(hour=13, minute=0, second=0, microsecond=0)
-        label = "08:00 - 13:00"
-    elif 17 <= now.hour < 19:
-        start = now.replace(hour=13, minute=0, second=0, microsecond=0)
-        end = now.replace(hour=18, minute=0, second=0, microsecond=0)
-        label = "13:00 - 18:00"
-    else:
-        return pd.DataFrame(), "Out of schedule"
+    # Ventana diaria fija: 09:00 del día anterior -> 09:00 de hoy (ART)
+    start = (now - timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    end = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    label = "09:00 (día anterior) - 09:00 (hoy)"
 
     return df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)], label
 
