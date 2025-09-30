@@ -27,5 +27,5 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO_ELSZTAIN }}
+          EMAIL_TO_ELSZTAIN : ${{ secrets.EMAIL_TO_ELSZTAIN }}
         run: python mailer_elsztain.py
