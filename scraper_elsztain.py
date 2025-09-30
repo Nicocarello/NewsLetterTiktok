@@ -339,7 +339,7 @@ def run_apify_queries(queries: List[str], countries: List[str]) -> List[pd.DataF
                 "lr": "lang_es",
                 "maxItems": 300,
                 "query": query,
-                "time_period": "last_hour",
+                "time_period": "last_day",
             }
             log.info(f"Ejecutando {ACTOR_ID} para {country} con query '{query}'...")
             try:
