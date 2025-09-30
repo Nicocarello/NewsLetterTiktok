@@ -125,10 +125,9 @@ def format_email_html(df: pd.DataFrame, window_label: str) -> str:
 
     body = [
         "<div style='margin-bottom:20px;'>"
-        "<img src='https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/cabezal.png' "
         "alt='Header' style='max-width:100%; height:auto;'>"
         "</div>",
-        f"<h2>Noticias recolectadas ({html_escape(window_label)})</h2>"
+        f"<h2>Ventana ({html_escape(window_label)})</h2>"
     ]
 
     # Agrupar por 'source' (dominio del medio)
@@ -189,7 +188,7 @@ if __name__ == "__main__":
         raise SystemExit(0)
 
     body = format_email_html(filtered, window_label)
-    subject = f"Newsletter Noticias ({window_label})"
+    subject = f"Noticias Elsztain ({window_label})"
 
     send_email(subject, body)
     print("✅ Email enviado correctamente.")
