@@ -66,36 +66,108 @@ def format_email_html(df, window_label):
     if df.empty:
         return f"<p>No news found for {window_label}.</p>"
 
+    orderTags = ["PROACTIVAS", "GROOMING", "ISSUES", "GENERALES", "VIRALES", "COMPETENCIA"]
+    order_index = {t: i for i, t in enumerate(orderTags)}
+
+    # Normalizar columna tag para agrupado robusto
+    df = df.copy()
+    if "tag" not in df.columns:
+        df["tag"] = "generales"
+    df["tag_norm"] = (
+        df["tag"]
+        .fillna("generales")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
     body = [
-        # Imagen de cabecera
-        "<div style='margin-bottom:20px;'>"
+        # Cabecera
+        "<div style='margin-bottom:20px; text-align:center;'>"
         "<img src='https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/cabezal.png' "
         "alt='Header' style='max-width:100%; height:auto;'>"
         "</div>",
-        f"<h2>News collected ({window_label})</h2>"
+        f"<h2 style='font-family:Arial,Helvetica,sans-serif; color:#333; "
+        "border-bottom:2px solid #eee; padding-bottom:8px;'>"
+        f"📰 News collected ({window_label})</h2>"
     ]
 
-    for country, group in df.groupby("country"):
+    # Recorremos por país
+    for country, group_country in df.groupby("country"):
         img_url = COUNTRY_IMAGES.get(country, "")
+
+        # Encabezado de país
         if img_url:
             body.append(
-                f"<div style='margin-top:30px; margin-bottom:10px;'>"
-                f"<img src='{img_url}' alt='{country}' style='max-height:50px;'>"
+                f"<div style='margin-top:30px; margin-bottom:15px;'>"
+                f"<img src='{img_url}' alt='{country}' style='max-height:40px;'>"
                 f"</div>"
             )
         else:
-            body.append(f"<h2 style='margin-top:30px'>{country}</h2>")
-
-        for _, row in group.iterrows():
             body.append(
-                f"<div style='margin-bottom:35px;'>"
-                f"<h3 style='margin:0; font-size:18px;'><b>{row['title']}</b></h3>"
-                f"<p style='margin:0; font-size:13px; color:#555;'><i>{row['date_utc']} - {row['domain']}</i></p>"
-                f"<p style='margin:5px 0; font-size:14px;'>{row['snippet']}</p>"
-                f"<a href='{row['link']}' target='_blank'>{row['link']}</a>"
-                f"</div>"
+                f"<h3 style='margin-top:30px; color:#444; font-family:Arial,Helvetica,sans-serif'>{country}</h3>"
             )
+
+        # Ordenar y agrupar por tag con prioridad definida
+        known = group_country[group_country["tag_norm"].isin(orderTags)]
+        unknown = group_country[~group_country["tag_norm"].isin(orderTags)]
+
+        # Para consistencia visual, ordenamos dentro de cada tag por fecha si existe
+        def sort_news(dfpart):
+            # intenta date_utc, cae a scraped_at_dt si existe; si no, deja como viene
+            sort_key = pd.to_datetime(dfpart.get("date_utc", pd.NaT), errors="coerce", utc=True)
+            if "scraped_at_dt" in dfpart.columns:
+                sort_key = sort_key.fillna(dfpart["scraped_at_dt"])
+            return dfpart.assign(_k=sort_key).sort_values("_k", ascending=False)
+
+        # Tags conocidas en el orden pedido
+        for t in orderTags:
+            block = known[known["tag_norm"] == t]
+            if block.empty:
+                continue
+
+            # Subtítulo de tag
+            body.append(
+                f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
+                f"color:#222; text-transform:uppercase; letter-spacing:.5px;'>{t}</h4>"
+            )
+
+            for _, row in sort_news(block).iterrows():
+                body.append(
+                    "<div style='background:#fff; border:1px solid #ddd; border-radius:8px; "
+                    "padding:15px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);'>"
+                    f"<h3 style='margin:0; font-size:18px; color:#222; font-family:Arial,Helvetica,sans-serif'>{row['title']}</h3>"
+                    f"<p style='margin:0; font-size:12px; color:#777; font-family:Arial,Helvetica,sans-serif'><i>{row['date_utc']} - {row['domain']}</i></p>"
+                    f"<p style='margin:10px 0; font-size:14px; color:#333; line-height:1.4; font-family:Arial,Helvetica,sans-serif'>{row['snippet']}</p>"
+                    f"<a href='{row['link']}' target='_blank' "
+                    "style='display:inline-block; margin-top:5px; font-size:13px; color:#1a73e8; "
+                    "text-decoration:none; font-family:Arial,Helvetica,sans-serif'>🔗 Leer más</a>"
+                    "</div>"
+                )
+
+        # Tags desconocidas (no listadas), al final ordenadas alfabéticamente por nombre de tag
+        if not unknown.empty:
+            for t in sorted(unknown["tag_norm"].unique()):
+                block = unknown[unknown["tag_norm"] == t]
+                body.append(
+                    f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
+                    f"color:#222; text-transform:uppercase; letter-spacing:.5px;'>{t}</h4>"
+                )
+                for _, row in sort_news(block).iterrows():
+                    body.append(
+                        "<div style='background:#fff; border:1px solid #ddd; border-radius:8px; "
+                        "padding:15px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);'>"
+                        f"<h3 style='margin:0; font-size:18px; color:#222; font-family:Arial,Helvetica,sans-serif'>{row['title']}</h3>"
+                        f"<p style='margin:0; font-size:12px; color:#777; font-family:Arial,Helvetica,sans-serif'><i>{row['date_utc']} - {row['domain']}</i></p>"
+                        f"<p style='margin:10px 0; font-size:14px; color:#333; line-height:1.4; font-family:Arial,Helvetica,sans-serif'>{row['snippet']}</p>"
+                        f"<a href='{row['link']}' target='_blank' "
+                        "style='display:inline-block; margin-top:5px; font-size:13px; color:#1a73e8; "
+                        "text-decoration:none; font-family:Arial,Helvetica,sans-serif'>🔗 Leer más</a>"
+                        "</div>"
+                    )
+
     return "\n".join(body)
+
 
 
 
