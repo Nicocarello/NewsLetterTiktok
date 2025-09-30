@@ -2,10 +2,10 @@ name: Send News Emails
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # 08:00 Buenos Aires (UTC+3)
-    - cron: "0 16 * * *"   # 13:00 Buenos Aires
-    - cron: "0 21 * * *"   # 18:00 Buenos Aires
+    # GitHub Actions corre en UTC. 12:00 UTC = 09:00 Buenos Aires (UTC−3)
+    - cron: "0 12 * * *"
   workflow_dispatch:
+
 
 jobs:
   mailer:
