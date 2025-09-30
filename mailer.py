@@ -39,6 +39,19 @@ def get_sheet_data():
     header = values[0]
     return pd.DataFrame(values[1:], columns=header)
 
+def sentiment_badge(label: str) -> str:
+    lab = (label or "").strip().upper()
+    color = "#9e9e9e"  # neutro default
+    if lab == "POSITIVO":
+        color = "#2e7d32"  # verde
+    elif lab == "NEGATIVO":
+        color = "#c62828"  # rojo
+    elif lab == "NEUTRO":
+        color = "#616161"  # gris
+    return (
+        f"<span style='display:inline-block;padding:2px 8px;border-radius:12px;"
+        f"font-size:12px;color:#fff;background:{color};'>{lab or 'NEUTRO'}</span>"
+    )
 
 def filter_by_window(df, now):
     # Parse y localiza scraped_at
@@ -66,7 +79,7 @@ def format_email_html(df, window_label):
     if df.empty:
         return f"<p>No news found for {window_label}.</p>"
 
-    orderTags = ["proactivas", "grooming", "issues", "generales", "virales", "competencia"]
+    orderTags = ["PROACTIVAS", "GROOMING", "ISSUES", "GENERALES", "VIRALES", "COMPETENCIA"]
 
     df = df.copy()
     if "tag" not in df.columns:
@@ -115,13 +128,13 @@ def format_email_html(df, window_label):
 
         # Render de una noticia (para no repetir)
         def render_card(row):
-            sentiment_txt = row.get("sentiment_norm", "NEUTRO")
+            sentiment_html = sentiment_badge(row.get("sentiment_norm", "NEUTRO"))
             return (
                 "<div style='background:#fff; border:1px solid #ddd; border-radius:8px; "
                 "padding:15px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);'>"
                 f"<h3 style='margin:0; font-size:18px; color:#222; font-family:Arial,Helvetica,sans-serif'>{row['title']}</h3>"
                 f"<p style='margin:0; font-size:12px; color:#777; font-family:Arial,Helvetica,sans-serif'>"
-                f"<i>{row['date_utc']} - {row['domain']} - {sentiment_txt}</i></p>"
+                f"<i>{row['date_utc']} - {row['domain']} - {sentiment_html}</i></p>"
                 f"<p style='margin:10px 0; font-size:14px; color:#333; line-height:1.4; font-family:Arial,Helvetica,sans-serif'>{row['snippet']}</p>"
                 f"<a href='{row['link']}' target='_blank' "
                 "style='display:inline-block; margin-top:5px; font-size:13px; color:#1a73e8; "
