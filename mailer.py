@@ -84,7 +84,7 @@ def format_email_html(df, window_label):
     df = df.copy()
     if "tag" not in df.columns:
         df["tag"] = "generales"
-    df["tag_norm"] = df["tag"].fillna("generales").astype(str).str.strip().str.lower()
+    df["tag_norm"] = df["tag"].fillna("generales").astype(str).str.strip().str.upper()
 
     # Normalizar sentiment
     if "sentiment" not in df.columns:
