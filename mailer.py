@@ -149,7 +149,8 @@ def format_email_html(df, window_label):
                 continue
             body.append(
                 f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
-                f"color:#222; text-transform:uppercase; letter-spacing:.5px;'>{t}</h4>"
+                f"color:#222; text-transform:uppercase; letter-spacing:.5px; "
+                f"font-size:16px; font-weight:bold;'>{t}</h4>"
             )
             for _, row in sort_news(block).iterrows():
                 body.append(render_card(row))
@@ -160,7 +161,8 @@ def format_email_html(df, window_label):
                 block = unknown[unknown["tag_norm"] == t]
                 body.append(
                     f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
-                    f"color:#222; text-transform:uppercase; letter-spacing:.5px;'>{t}</h4>"
+                    f"color:#222; text-transform:uppercase; letter-spacing:.5px; "
+                    f"font-size:16px; font-weight:bold;'>{t}</h4>"
                 )
                 for _, row in sort_news(block).iterrows():
                     body.append(render_card(row))
