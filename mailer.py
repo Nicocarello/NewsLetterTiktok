@@ -79,7 +79,7 @@ def format_email_html(df, window_label):
     if df.empty:
         return f"<p>No news found for {window_label}.</p>"
 
-    orderTags = ["PROACTIVAS", "ISSUES", "GROOMING", "GENERAL", "VIRALES", "COMPETENCIA"]
+    orderTags = ["PROACTIVAS", "ISSUES", "GROOMING", "GENERALES", "VIRALES", "COMPETENCIA"]
 
     df = df.copy()
     if "tag" not in df.columns:
