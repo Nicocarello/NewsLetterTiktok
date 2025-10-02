@@ -46,7 +46,7 @@ for query in QUERIES:
             "lr": "lang_es",
             "maxItems": 5000,
             "query": query,
-            "time_period": "last_hour",
+            "time_period": "last_day",
         }
         print(f"[{datetime.now()}] Ejecutando {ACTOR_ID} para {country} con query '{query}'...")
         try:
