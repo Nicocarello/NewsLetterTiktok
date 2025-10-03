@@ -3,13 +3,15 @@ name: Send News Emails
 on:
   schedule:
     # GitHub Actions corre en UTC. 12:00 UTC = 09:00 Buenos Aires (UTC−3)
-    - cron: "0 12 * * *"
+    # Solo lunes (1) a viernes (5)
+    - cron: "0 12 * * 1-5"
   workflow_dispatch:
-
 
 jobs:
   mailer:
     runs-on: ubuntu-latest
+    env:
+      TZ: America/Argentina/Buenos_Aires  # para que los logs muestren hora local
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
