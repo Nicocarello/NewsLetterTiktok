@@ -25,7 +25,6 @@ RECIPIENTS = os.getenv("EMAIL_TO", "").split(",")
 # Zona horaria
 TZ_ARG = pytz.timezone("America/Argentina/Buenos_Aires")
 
-
 # === Funciones ===
 def get_sheet_data():
     """Descarga los datos de la hoja de Google Sheets"""
@@ -54,19 +53,24 @@ def sentiment_badge(label: str) -> str:
     )
 
 def filter_by_window(df, now):
-    # Parse y localiza scraped_at
+    """
+    - Lun 09:00: ventana desde Vie 09:00 -> Lun 09:00 (3 días hacia atrás)
+    - Mar-Vie 09:00: ventana desde ayer 09:00 -> hoy 09:00 (1 día hacia atrás)
+    - Sáb y Dom: no se envía (se corta en main)
+    """
+    # Parse y localiza scraped_at en ART
     df["scraped_at_dt"] = pd.to_datetime(
-        df["scraped_at"], format="%d/%m/%Y %H:%M"
+        df["scraped_at"], format="%d/%m/%Y %H:%M", errors="coerce"
     ).dt.tz_localize(TZ_ARG)
 
-    # Ventana diaria fija: 09:00 del día anterior -> 09:00 de hoy (ART)
-    start = (now - timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    weekday = now.weekday()  # Mon=0 ... Sun=6
+    days_back = 3 if weekday == 0 else 1  # lunes 3, resto 1 (sábado/domingo no se ejecuta)
+
+    start = (now - timedelta(days=days_back)).replace(hour=9, minute=0, second=0, microsecond=0)
     end = now.replace(hour=9, minute=0, second=0, microsecond=0)
-    label = "09:00 (día anterior) - 09:00 (hoy)"
+    label = f"{start.strftime('%d/%m/%Y 09:00')} - {end.strftime('%d/%m/%Y 09:00')}"
 
     return df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)], label
-
-
 
 # Diccionario de imágenes de país
 COUNTRY_IMAGES = {
@@ -126,7 +130,7 @@ def format_email_html(df, window_label):
         known = group_country[group_country["tag_norm"].isin(orderTags)]
         unknown = group_country[~group_country["tag_norm"].isin(orderTags)]
 
-        # Render de una noticia (para no repetir)
+        # Render de una noticia
         def render_card(row):
             sentiment_html = sentiment_badge(row.get("sentiment_norm", "NEUTRO"))
             return (
@@ -142,7 +146,7 @@ def format_email_html(df, window_label):
                 "</div>"
             )
 
-        # Tags conocidas en el orden pedido
+        # Tags conocidas
         for t in orderTags:
             block = known[known["tag_norm"] == t]
             if block.empty:
@@ -155,7 +159,7 @@ def format_email_html(df, window_label):
             for _, row in sort_news(block).iterrows():
                 body.append(render_card(row))
 
-        # Tags no listadas, al final
+        # Tags no listadas
         if not unknown.empty:
             for t in sorted(unknown["tag_norm"].unique()):
                 block = unknown[unknown["tag_norm"] == t]
@@ -169,39 +173,43 @@ def format_email_html(df, window_label):
 
     return "\n".join(body)
 
-
-
-
-
 def send_email(subject, body):
     """Envía el correo usando SMTP"""
+    recipients = [r.strip() for r in RECIPIENTS if r.strip()]
+    if not recipients:
+        print("⚠️ No hay destinatarios en EMAIL_TO.")
+        return
+
     msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
     msg["From"] = EMAIL_USER
-    msg["To"] = ", ".join(RECIPIENTS)
+    msg["To"] = ", ".join(recipients)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(EMAIL_USER, EMAIL_PASS)
-        server.sendmail(EMAIL_USER, RECIPIENTS, msg.as_string())
-
+        server.sendmail(EMAIL_USER, recipients, msg.as_string())
 
 # === Ejecución ===
 if __name__ == "__main__":
     now = datetime.now(TZ_ARG)
 
+    # Sábado (5) o domingo (6): no se envía
+    if now.weekday() in (5, 6):
+        print("ℹ️ Fin de semana: no se envía newsletter.")
+        raise SystemExit(0)
+
     df = get_sheet_data()
     if df.empty:
         print("⚠️ No hay datos en la hoja.")
-        exit(0)
+        raise SystemExit(0)
 
     filtered, window_label = filter_by_window(df, now)
     if filtered.empty:
-        print("⚠️ No hay noticias en esta ventana.")
-        exit(0)
+        print(f"⚠️ No hay noticias en la ventana {window_label}.")
+        raise SystemExit(0)
 
     body = format_email_html(filtered, window_label)
     subject = f"Newsletter TikTok ({window_label})"
-
 
     send_email(subject, body)
     print("✅ Email enviado correctamente.")
