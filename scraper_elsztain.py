@@ -81,7 +81,6 @@ SHEET_TAB = "NOTICIAS"
 HEADER = ["date_utc", "title", "link", "source", "snippet", "sentiment", "scraped_at"]
 
 # Filtros
-COUNTRIES = ["ar"]
 QUERIES = ['"eduardo elsztain"', "eduardo elsztain"]
 
 # Zona horaria de Argentina
@@ -331,26 +330,23 @@ def with_backoff(fn: Callable, *, retries: int = 5, base_wait: float = 1.0, on_r
 def run_apify_queries(queries: List[str], countries: List[str]) -> List[pd.DataFrame]:
     all_dfs: List[pd.DataFrame] = []
     for query in queries:
-        for country in countries:
-            run_input = {
-                "cr": country,
-                "gl": country,
+        run_input = {
                 "hl": "es-419",
                 "lr": "lang_es",
                 "maxItems": 300,
                 "query": query,
                 "time_period": "last_hour",
             }
-            log.info(f"Ejecutando {ACTOR_ID} para {country} con query '{query}'...")
+            log.info(f"Ejecutando {ACTOR_ID} con query '{query}'...")
             try:
                 run = apify_client.actor(ACTOR_ID).call(run_input=run_input)
             except Exception as e:
-                log.error(f"No se pudo ejecutar actor para {country} con '{query}': {e}")
+                log.error(f"No se pudo ejecutar actor con '{query}': {e}")
                 continue
 
             dataset_id = run.get("defaultDatasetId")
             if not dataset_id:
-                log.warning(f"Sin dataset para {country} - '{query}'")
+                log.warning(f"Sin dataset para - '{query}'")
                 continue
 
             try:
@@ -360,7 +356,7 @@ def run_apify_queries(queries: List[str], countries: List[str]) -> List[pd.DataF
                 continue
 
             if not items:
-                log.info(f"Sin resultados para {country} - '{query}'")
+                log.info(f"Sin resultados - '{query}'")
                 continue
 
             df = pd.DataFrame(items)
@@ -483,7 +479,7 @@ def append_new_rows(new_rows: pd.DataFrame) -> None:
 # ---------------------------
 def run_pipeline() -> None:
     # 1) Scrape
-    all_dfs = run_apify_queries(QUERIES, COUNTRIES)
+    all_dfs = run_apify_queries(QUERIES)
     if not all_dfs:
         log.error("No se obtuvieron resultados de ningún país/query.")
         return
