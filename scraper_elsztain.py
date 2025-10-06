@@ -327,67 +327,71 @@ def with_backoff(fn: Callable, *, retries: int = 5, base_wait: float = 1.0, on_r
 # ---------------------------
 # Scrape con Apify -> DataFrame
 # ---------------------------
-def run_apify_queries(queries: List[str], countries: List[str]) -> List[pd.DataFrame]:
+def run_apify_queries(queries: List[str]) -> List[pd.DataFrame]:
+    """
+    Ejecuta el actor de Google News por cada query (sin restricción geográfica).
+    """
     all_dfs: List[pd.DataFrame] = []
     for query in queries:
         run_input = {
-                "hl": "es-419",
-                "lr": "lang_es",
-                "maxItems": 300,
-                "query": query,
-                "time_period": "last_hour",
-            }
-            log.info(f"Ejecutando {ACTOR_ID} con query '{query}'...")
-            try:
-                run = apify_client.actor(ACTOR_ID).call(run_input=run_input)
-            except Exception as e:
-                log.error(f"No se pudo ejecutar actor con '{query}': {e}")
-                continue
+            "hl": "es-419",       # interfaz en español latino
+            "lr": "lang_es",      # resultados en español
+            "maxItems": 300,
+            "query": query,
+            "time_period": "last_hour",  # podés cambiar a "last_24_hours" si querés mayor ventana
+        }
 
-            dataset_id = run.get("defaultDatasetId")
-            if not dataset_id:
-                log.warning(f"Sin dataset para - '{query}'")
-                continue
+        log.info(f"Ejecutando {ACTOR_ID} con query '{query}' (sin filtro de país)...")
+        try:
+            run = apify_client.actor(ACTOR_ID).call(run_input=run_input)
+        except Exception as e:
+            log.error(f"No se pudo ejecutar actor con '{query}': {e}")
+            continue
 
-            try:
-                items = list_all_items(dataset_id)
-            except Exception as e:
-                log.error(f"No se pudo listar dataset {dataset_id}: {e}")
-                continue
+        dataset_id = run.get("defaultDatasetId")
+        if not dataset_id:
+            log.warning(f"Sin dataset para '{query}'")
+            continue
 
-            if not items:
-                log.info(f"Sin resultados - '{query}'")
-                continue
+        try:
+            items = list_all_items(dataset_id)
+        except Exception as e:
+            log.error(f"No se pudo listar dataset {dataset_id}: {e}")
+            continue
 
-            df = pd.DataFrame(items)
-            if "link" not in df.columns:
-                log.warning("Dataset sin columna 'link'; se omite.")
-                continue
+        if not items:
+            log.info(f"Sin resultados - '{query}'")
+            continue
 
-            # Normalizaciones + dedupe
-            df["link"] = df["link"].astype(str).map(canonical_url)
-            df.drop_duplicates(subset=["link"], inplace=True)
+        df = pd.DataFrame(items)
+        if "link" not in df.columns:
+            log.warning("Dataset sin columna 'link'; se omite.")
+            continue
 
-            # Asegurar "source"
-            df = ensure_source_column(df)
+        # Normalizaciones + dedupe
+        df["link"] = df["link"].astype(str).map(canonical_url)
+        df.drop_duplicates(subset=["link"], inplace=True)
 
-            # Timestamps
-            now_utc = datetime.now(timezone.utc)
-            if "date_utc" in df.columns:
-                dt = pd.to_datetime(df["date_utc"], utc=True, errors="coerce")
-                # Formato dd/mm/YYYY
-                df["date_utc"] = dt.dt.strftime("%d/%m/%Y")
-            else:
-                df["date_utc"] = ""
+        # Asegurar "source"
+        df = ensure_source_column(df)
 
-            # scraped_at -> local AR dd/mm/YYYY HH:MM
-            df["scraped_at"] = now_utc.astimezone(TZ_ARG).strftime("%d/%m/%Y %H:%M")
+        # Timestamps
+        now_utc = datetime.now(timezone.utc)
+        if "date_utc" in df.columns:
+            dt = pd.to_datetime(df["date_utc"], utc=True, errors="coerce")
+            df["date_utc"] = dt.dt.strftime("%d/%m/%Y")
+        else:
+            df["date_utc"] = ""
 
-            # sentiment placeholder si no viene
-            if "sentiment" not in df.columns:
-                df["sentiment"] = ""
+        # scraped_at -> local AR dd/mm/YYYY HH:MM
+        df["scraped_at"] = now_utc.astimezone(TZ_ARG).strftime("%d/%m/%Y %H:%M")
 
-            all_dfs.append(df)
+        # sentiment placeholder si no viene
+        if "sentiment" not in df.columns:
+            df["sentiment"] = ""
+
+        all_dfs.append(df)
+
     return all_dfs
 
 # ---------------------------
