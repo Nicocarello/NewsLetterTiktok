@@ -84,7 +84,7 @@ final_df['date_utc'] = final_df['date_utc'].dt.strftime('%d/%m/%Y')
 
 # Columnas adicionales
 final_df['sentiment'] = ''
-final_df['fecha_envio'] = ''
+final_df['semana'] = ''
 final_df['tag'] = ''
 final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
 
@@ -93,7 +93,7 @@ final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'])
 final_df['scraped_at'] = final_df['scraped_at'].dt.strftime('%d/%m/%Y %H:%M')
 
 # Orden de columnas (Forma segura y robusta)
-header = ['fecha_envio','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
+header = ['semana','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
 
 # Reindexamos el DataFrame. Esto asegura que todas las columnas del 'header' existan.
 # Si una columna no existe en los datos originales, se creará y se rellenará con ''.
