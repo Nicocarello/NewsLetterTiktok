@@ -467,16 +467,18 @@ def append_new_rows(new_rows: pd.DataFrame) -> None:
         log.info("No hay filas nuevas para agregar.")
         return
     log.info(f"Agregando {len(new_rows)} filas nuevas...")
+
     with_backoff(
         lambda: sheet.values().append(
             spreadsheetId=SPREADSHEET_ID,
             range=f"{SHEET_TAB}!A1",
-            valueInputOption="RAW",
+            valueInputOption="USER_ENTERED",  # 👈 cambio clave
             insertDataOption="INSERT_ROWS",
             body={"values": new_rows.astype(str).values.tolist()},
         ).execute(),
         on_retry="Append a Google Sheets",
     )
+
 
 # ---------------------------
 # Main pipeline
@@ -491,6 +493,7 @@ def run_pipeline() -> None:
     # 2) Combine + dedupe
     final_df = pd.concat(all_dfs, ignore_index=True)
     final_df.drop_duplicates(subset=["link"], inplace=True)
+
 
     # 3) Prefiltro por título/snippet
     if not final_df.empty:
