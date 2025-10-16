@@ -30,7 +30,7 @@ ACTOR_ID = "easyapi/google-news-scraper"
 
 # Lista de países
 COUNTRIES = ["ar", "cl", "pe"]
-QUERIES = ["tik-tok", "tiktok", "tiktok suicidio", "tiktok grooming", "tiktok armas", "tiktok drogas", "tiktok violacion"]
+QUERIES = ["tik-tok", "tiktok", "tiktok suicidio", "tiktok grooming", "tiktok armas", "tiktok drogas", "tiktok violacion","tiktok delincuentes","tiktok ladrones","tiktok narcos"]
 
 # Definimos la zona horaria de Argentina
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
