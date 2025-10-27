@@ -353,7 +353,7 @@ def run_apify_queries(queries: List[str]) -> List[pd.DataFrame]:
             "lr": "lang_es",    # resultados en español
             "maxItems": 300,
             "query": query,
-            "time_period": "last_year",  # podés cambiar a "last_24_hours" si querés mayor ventana
+            "time_period": "last_hour",  # podés cambiar a "last_24_hours" si querés mayor ventana
         }
 
         log.info(f"Ejecutando {ACTOR_ID} con query '{query}' (sin filtro de país)...")
