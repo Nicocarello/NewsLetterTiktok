@@ -1,0 +1,28 @@
+name: Run IRSA Scraper
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # cada hora en el minuto 0
+  workflow_dispatch:      # permite correrlo manualmente también
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scraper_irsa.py
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}   # 👈 agregar esto
+        run: python scraper_irsa.py
