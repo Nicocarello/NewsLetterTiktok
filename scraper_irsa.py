@@ -72,7 +72,7 @@ ACTOR_ID = "easyapi/google-news-scraper"
 
 # Inicializar Gemini
 genai.configure(api_key=GEMINI_API_KEY)
-GEMINI_MODEL_NAME = "gemini-2.0-flash"  # ajustable si usás otro
+GEMINI_MODEL_NAME = "gemini-1.5-flash" # ajustable si usás otro
 model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 
 # IDs y constantes
@@ -334,11 +334,11 @@ def run_apify_queries(queries: List[str]) -> List[pd.DataFrame]:
     all_dfs: List[pd.DataFrame] = []
     for query in queries:
         run_input = {
-            "hl": "es-419",       # interfaz en español latino
-            "lr": "lang_es",      # resultados en español
+            "hl": "es-419",      # interfaz en español latino
+            "lr": "lang_es",    # resultados en español
             "maxItems": 300,
             "query": query,
-            "time_period": "last_year",  # podés cambiar a "last_24_hours" si querés mayor ventana
+            "time_period": "last_hour",  # podés cambiar a "last_24_hours" si querés mayor ventana
         }
 
         log.info(f"Ejecutando {ACTOR_ID} con query '{query}' (sin filtro de país)...")
@@ -453,14 +453,44 @@ def ensure_headers() -> pd.DataFrame:
         )
         return pd.DataFrame(columns=HEADER)
 
+    # --- INICIO DE LA MODIFICACIÓN ---
+    # Lógica robusta para manejar filas incompletas
+    
     header_in_sheet = values[0]
     rows = values[1:] if len(values) > 1 else []
-    existing_df = pd.DataFrame(rows, columns=header_in_sheet)
+    
+    try:
+        # Intento normal y rápido
+        existing_df = pd.DataFrame(rows, columns=header_in_sheet)
+    
+    except (ValueError, AssertionError):
+        # Fallback: El error "X columns passed, passed data had Y columns"
+        log.warning(f"Detectadas filas incompletas en Google Sheet (encabezado={len(header_in_sheet)}, datos variables). Se normalizarán.")
+        
+        # Usa el encabezado de la hoja (que puede tener 6 o 7 cols)
+        num_cols_header = len(header_in_sheet)
+        data_normalizada = []
+        
+        for row in rows:
+            # Asegura que cada fila tenga exactamente 'num_cols_header'
+            # Rellena con "" si es más corta, la trunca si es más larga.
+            padded_row = (list(row) + [""] * num_cols_header)[:num_cols_header]
+            data_normalizada.append(padded_row)
+        
+        # Crea el DataFrame con los datos limpios
+        existing_df = pd.DataFrame(data_normalizada, columns=header_in_sheet)
+    
+    # --- FIN DE LA MODIFICACIÓN ---
+
+    # El resto de la función original sigue:
+    # Se asegura de que las 7 columnas que QUEREMOS existan
     for col in HEADER:
         if col not in existing_df.columns:
             existing_df[col] = ""
+    # Reordena/filtra para que solo queden las 7 columnas del HEADER
     existing_df = existing_df.reindex(columns=HEADER, fill_value="")
     return existing_df
+
 
 def append_new_rows(new_rows: pd.DataFrame) -> None:
     if new_rows.empty:
