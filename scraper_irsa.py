@@ -282,11 +282,18 @@ def analizar_noticia(url: str, *, retries: int = 3) -> str:
     try:
         html = download_html(url)
         if not html:
+            # Loguea si el HTML no se pudo descargar
+            log.info(f"Análisis NEUTRO (HTML vacío o descarga fallida): {url}")
             return "NEUTRO"
+            
         texto = extract_visible_text(html, max_chars=5000)
         if not texto or len(texto) < 120:
+            # Loguea si el texto es muy corto (probable JS)
+            log.info(f"Análisis NEUTRO (Texto extraído muy corto: {len(texto)} chars): {url}")
             return "NEUTRO"
 
+        # Si llegamos aquí, SÍ vamos a llamar a Gemini
+        log.info(f"Llamando a Gemini para: {url}")
         prompt = SENT_PROMPT_TMPL.format(texto=texto)
 
         for attempt in range(retries):
@@ -295,16 +302,24 @@ def analizar_noticia(url: str, *, retries: int = 3) -> str:
                 out = (resp.text or "").strip().upper()
                 m = re.search(r"[A-ZÁÉÍÓÚÜÑ]+", out)  # tomar la primera palabra alfabética
                 label = m.group(0) if m else out
-                return label if label in SENTIMENT_LABELS else "NEUTRO"
+                
+                final_label = label if label in SENTIMENT_LABELS else "NEUTRO"
+                
+                # Loguea el resultado de Gemini
+                log.info(f"Gemini devolvió: {final_label} (raw: '{out[:50]}...')")
+                return final_label
+                
             except Exception as e:
                 if attempt < retries - 1:
                     sleep(1.5 * (2 ** attempt))
                     continue
-                log.debug(f"Gemini error en {url}: {e}")
+                # Loguea si Gemini falló
+                log.warning(f"Análisis NEUTRO (Error de Gemini en {url}): {e}")
                 return "NEUTRO"
 
     except Exception as e:
-        log.debug(f"Error procesando {url}: {e}")
+        # Loguea si hubo un error general
+        log.warning(f"Análisis NEUTRO (Error procesando {url}): {e}")
         return "NEUTRO"
 
 # ---------------------------
