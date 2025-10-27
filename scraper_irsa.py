@@ -72,7 +72,7 @@ ACTOR_ID = "easyapi/google-news-scraper"
 
 # Inicializar Gemini
 genai.configure(api_key=GEMINI_API_KEY)
-GEMINI_MODEL_NAME = "gemini-1.5-flash" # ajustable si usás otro
+GEMINI_MODEL_NAME = "gemini-pro" # Modelo estándar y estable
 model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 
 # IDs y constantes
