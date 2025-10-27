@@ -386,9 +386,15 @@ def run_apify_queries(queries: List[str]) -> List[pd.DataFrame]:
         # scraped_at -> local AR dd/mm/YYYY HH:MM
         df["scraped_at"] = now_utc.astimezone(TZ_ARG).strftime("%d/%m/%Y %H:%M")
 
+        # --- INICIO DE LA MODIFICACIÓN ---
         # sentiment placeholder si no viene
         if "sentiment" not in df.columns:
             df["sentiment"] = ""
+        else:
+            # Si Apify trae la columna (ej. como 'null'), forzarla a string
+            # y rellenar/reemplazar Nones o "nan" para que el Step 5 la detecte como vacía.
+            df["sentiment"] = df["sentiment"].astype(str).fillna("").replace("None", "").replace("nan", "")
+        # --- FIN DE LA MODIFICACIÓN ---
 
         all_dfs.append(df)
 
@@ -538,11 +544,17 @@ def run_pipeline() -> None:
     filtered = filter_by_content(prefiltered)
     if filtered.empty:
         log.warning("Tras el filtro de contenido, no quedaron resultados relevantes.")
+        # Nota: aunque esté vacío, continuamos para leer la hoja
+        # y asegurarnos de que los encabezados estén allí.
+        # Si no, la próxima ejecución podría fallar.
 
     # 5) Sentimiento con Gemini (solo si la columna existe/viene vacía)
     if "sentiment" not in filtered.columns:
         filtered["sentiment"] = ""
+    
+    # Esta máscara ahora funciona gracias al cambio en run_apify_queries
     mask_to_score = filtered["sentiment"].astype(str).str.strip().eq("")
+    
     if mask_to_score.any():
         log.info(f"Calculando sentimiento Gemini para {mask_to_score.sum()} notas...")
         # Por estabilidad de cuota, lo hacemos secuencial; si querés, podés paralelizar con 3-4 workers.
