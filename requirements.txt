@@ -8,3 +8,4 @@ beautifulsoup4
 pytz
 requests
 google-generativeai
+packaging
