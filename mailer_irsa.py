@@ -188,7 +188,7 @@ if __name__ == "__main__":
         raise SystemExit(0)
 
     body = format_email_html(filtered, window_label)
-    subject = f"Noticias Elsztain ({window_label})"
+    subject = f"Noticias IRSA ({window_label})"
 
     send_email(subject, body)
     print("✅ Email enviado correctamente.")
