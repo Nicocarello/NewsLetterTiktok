@@ -9,6 +9,7 @@ import pytz
 import requests
 from bs4 import BeautifulSoup
 import re
+import calendar
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
@@ -74,6 +75,27 @@ if not all_dfs:
     print("❌ No se obtuvieron resultados de ningún país.")
     exit(0)
 
+
+def format_week_range(date_str):
+    if not date_str or pd.isna(date_str):
+        return ''
+
+    try:
+        # Convertir la fecha del formato dd/mm/YYYY
+        dt = datetime.strptime(date_str, '%d/%m/%Y')
+
+        # Calcular lunes (weekday 0) y domingo (weekday 6)
+        monday = dt - pd.Timedelta(days=dt.weekday())
+        sunday = monday + pd.Timedelta(days=6)
+
+        # Formato: "DD–DD MMM" (MMM en mayúsculas)
+        month_abbr = calendar.month_abbr[monday.month].upper()
+
+        return f"{monday.day:02d}–{sunday.day:02d} {month_abbr}"
+
+    except Exception:
+        return ''
+
 # === DataFrame con lo nuevo ===
 final_df = pd.concat(all_dfs, ignore_index=True)
 final_df.drop_duplicates(subset=["link"], inplace=True)
@@ -84,7 +106,7 @@ final_df['date_utc'] = final_df['date_utc'].dt.strftime('%d/%m/%Y')
 
 # Columnas adicionales
 final_df['sentiment'] = ''
-final_df['semana'] = ''
+final_df['semana'] = final_df['date_utc'].apply(format_week_range)
 final_df['tag'] = ''
 final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
 
