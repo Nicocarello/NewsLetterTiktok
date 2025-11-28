@@ -107,7 +107,8 @@ final_df['date_utc'] = final_df['date_utc'].dt.strftime('%d/%m/%Y')
 
 # Columnas adicionales
 final_df['sentiment'] = ''
-final_df['semana'] = final_df['date_utc'].apply(format_week_range)
+# final_df['semana'] = final_df['date_utc'].apply(format_week_range)
+final_df['semana'] = ''
 final_df['tag'] = ''
 final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
 
