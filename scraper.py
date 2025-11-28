@@ -84,14 +84,15 @@ def format_week_range(date_str):
         # Convertir la fecha del formato dd/mm/YYYY
         dt = datetime.strptime(date_str, '%d/%m/%Y')
 
-        # Calcular lunes (weekday 0) y domingo (weekday 6)
+        # Calcular lunes (weekday=0) y domingo (weekday=6)
         monday = dt - pd.Timedelta(days=dt.weekday())
         sunday = monday + pd.Timedelta(days=6)
 
-        # Formato: "DD–DD MMM" (MMM en mayúsculas)
+        # Mes abreviado en mayúsculas
         month_abbr = calendar.month_abbr[monday.month].upper()
 
-        return f"{monday.day:02d}–{sunday.day:02d} {month_abbr}"
+        # Formato final: "DD–DD MMM YYYY"
+        return f"{monday.day:02d}–{sunday.day:02d} {month_abbr} {monday.year}"
 
     except Exception:
         return ''
