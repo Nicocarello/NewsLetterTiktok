@@ -1,27 +1,27 @@
-name: Run News Scraper
+# name: Run News Scraper
 
-on:
-  schedule:
-    - cron: "0 * * * *"   # cada hora en el minuto 0
-  workflow_dispatch:      # permite correrlo manualmente también
+# on:
+#   schedule:
+#     - cron: "0 * * * *"   # cada hora en el minuto 0
+#   workflow_dispatch:      # permite correrlo manualmente también
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+# jobs:
+#   run:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+#       - name: Install dependencies
+#         run: pip install -r requirements.txt
 
-      - name: Run script
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: python scraper.py
+#       - name: Run script
+#         env:
+#           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+#           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+#         run: python scraper.py
