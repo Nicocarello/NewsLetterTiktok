@@ -155,6 +155,15 @@ if 'text' not in df.columns:
 # filtrar replies que comienzan con '@'
 df = df[~df['text'].str.startswith('@', na=False)]
 
+df['impresiones'] = df['impresiones'].astype(int)
+df['interacciones'] = df['interacciones'].astype(int)
+df['compartidos'] = df['compartidos'].astype(int)
+df['likes'] = df['likes'].astype(int)
+df['comentarios'] = df['comentarios'].astype(int)
+df['retweets'] = df['retweets'].astype(int)
+df['citas'] = df['citas'].astype(int)
+df['guardados'] = df['guardados'].astype(int)
+
 # formatear 'fecha' como YYYY-MM-DD HH:MM:SS
 if 'fecha' in df.columns:
     df['fecha'] = pd.to_datetime(df['fecha'], errors='coerce', utc=True).dt.tz_convert(TZ_ARGENTINA)
