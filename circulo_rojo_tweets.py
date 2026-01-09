@@ -117,12 +117,12 @@ combined_df.drop_duplicates(subset=["link"], inplace=True)
 # === Sobrescribir hoja con datos limpios ===
 sheet.values().clear(
     spreadsheetId=SPREADSHEET_ID,
-    range="Data!A:J"
+    range="TWEETS!A:M"
 ).execute()
 
 sheet.values().update(
     spreadsheetId=SPREADSHEET_ID,
-    range="Data!A1",
+    range="TWEETS!A:M",
     valueInputOption="RAW",
     body={"values": [header] + combined_df.astype(str).values.tolist()}
 ).execute()
