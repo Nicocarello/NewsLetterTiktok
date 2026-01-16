@@ -7,6 +7,7 @@ from datetime import datetime
 import json
 import pytz
 import time
+import sys
 
 # --- Config ---
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -20,12 +21,87 @@ APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 apify_client = ApifyClient(APIFY_TOKEN)
 
 TWITTER_ACTOR_ID = "kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest"
-user_list = ["Mau_Albornoz", "fedeaikawa"]
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
 
 # columnas/orden objetivo (13 columnas -> A:M)
 header = ['text', 'fecha', 'cuenta', 'seguidores', 'link', 'impresiones',
           'interacciones', 'compartidos', 'likes', 'comentarios', 'retweets', 'citas', 'guardados']
+
+def load_users_from_sheet(sheet_obj, spreadsheet_id, range_name="USUARIOS!A:B"):
+    """
+    Intenta leer la hoja 'USUARIOS' y devuelve una lista de usuarios activos.
+    Soporta:
+      - Cabecera ['usuario','activo'] -> toma sólo los que tienen activo truthy.
+      - Sólo una columna (usuario) -> toma todos los no vacíos.
+    Si falla o no hay datos, devuelve lista vacía.
+    """
+    try:
+        resp = sheet_obj.values().get(
+            spreadsheetId=spreadsheet_id,
+            range=range_name
+        ).execute()
+        values = resp.get("values", [])
+    except Exception as e:
+        print(f"⚠️ Error leyendo USUARIOS sheet ({range_name}): {e}")
+        return []
+
+    if not values:
+        return []
+
+    # Si hay cabecera detectarla
+    header_row = [h.strip().lower() for h in values[0]]
+    rows = values[1:] if len(values) > 1 else []
+
+    # Caso: tabla con encabezados usuario/activo
+    if 'usuario' in header_row:
+        df_users = pd.DataFrame(rows, columns=values[0])
+        # Normalizar columnas si existieran en diferentes mayúsculas
+        df_users.columns = [c.strip().lower() for c in df_users.columns]
+        # Si hay columna 'activo', filtramos
+        if 'activo' in df_users.columns:
+            def is_active(v):
+                if pd.isna(v): 
+                    return False
+                s = str(v).strip().lower()
+                return s in ['true', '1', 'si', 'sí', 'yes', 'y', 'activado', 'activo']
+            df_users['activo_bool'] = df_users['activo'].apply(is_active)
+            users = df_users[df_users['activo_bool']]['usuario'].dropna().astype(str).str.strip().tolist()
+            return [u for u in users if u]
+        else:
+            # No hay columna activo: tomar todos los usuarios no vacíos
+            users = df_users['usuario'].dropna().astype(str).str.strip().tolist()
+            return [u for u in users if u]
+
+    # Caso: sin cabecera (o cabecera no incluye 'usuario'): tratar la primera columna como lista de usuarios
+    # Flatten values: cada fila puede ser [usuario] o [usuario, activo]
+    users = []
+    for row in values:
+        if not row:
+            continue
+        candidate = str(row[0]).strip()
+        if candidate:
+            users.append(candidate)
+    return users
+
+def load_users_with_fallback():
+    users = load_users_from_sheet(sheet, SPREADSHEET_ID)
+    if users:
+        print(f"🔎 Usuarios cargados desde Google Sheet: {len(users)}")
+        return users
+    # fallback: variable de entorno
+    env = os.getenv("TWITTER_USERS", "")
+    if env:
+        users = [u.strip() for u in env.split(",") if u.strip()]
+        if users:
+            print(f"🔁 No había usuarios en la sheet; fallback a TWITTER_USERS env var ({len(users)} usuarios).")
+            return users
+    # último recurso: lista pequeña por defecto (opcional)
+    default = ["Mau_Albornoz", "fedeaikawa"]
+    print(f"⚠️ No se encontraron usuarios en sheet ni en TWITTER_USERS. Usando default ({len(default)}).")
+    return default
+
+# --- Cargar lista de usuarios dinámicamente ---
+user_list = load_users_with_fallback()
 
 # --- Scraping con Apify ---
 dfs = []
@@ -72,23 +148,35 @@ for user in user_list:
 
     run_id = run.get('id')
     print(f"Actor ejecutado. ID: {run_id}, estado: {run.get('status')}")
+
     # Obtener items del dataset (intentar por run luego por defaultDatasetId)
+    dataset_items = []
     try:
-        dataset_items = apify_client.run(run_id).dataset().list_items().items
-    except Exception:
-        dataset_id = run.get("defaultDatasetId")
-        if dataset_id:
+        if run_id:
+            run_obj = apify_client.run(run_id)
             try:
-                dataset_items = apify_client.dataset(dataset_id).list_items().items
-            except Exception as e:
-                print(f"⚠️ Error leyendo dataset {dataset_id}: {e}")
-                dataset_items = []
-        else:
-            print(f"⚠️ No se encontró dataset para run {run_id}")
-            dataset_items = []
+                dataset_items = run_obj.dataset().list_items().items or []
+            except Exception:
+                dataset_id = run.get("defaultDatasetId")
+                if dataset_id:
+                    try:
+                        dataset_items = apify_client.dataset(dataset_id).list_items().items or []
+                    except Exception as e:
+                        print(f"⚠️ Error leyendo dataset {dataset_id}: {e}")
+                        dataset_items = []
+                else:
+                    print(f"⚠️ No se encontró dataset para run {run_id}")
+                    dataset_items = []
+    except Exception as e:
+        print(f"⚠️ Error general al obtener dataset para run {run_id}: {e}")
+        dataset_items = []
 
     if dataset_items:
-        dfs.append(pd.DataFrame(dataset_items))
+        try:
+            dfs.append(pd.DataFrame(dataset_items))
+            print(f"✅ Agregados {len(dataset_items)} items para {user}")
+        except Exception as e:
+            print(f"⚠️ Error convirtiendo items a DataFrame para {user}: {e}")
     else:
         print(f"⚠️ No se encontraron resultados para {user}")
 
@@ -97,8 +185,9 @@ for user in user_list:
 # Si no hay datos, cortamos
 if not dfs:
     print("❌ No se obtuvieron datos de ningún usuario. Terminando.")
-    exit(0)
+    sys.exit(0)
 
+# (El resto del script continúa exactamente igual que ya lo tenías:)
 # Concatenar y limpiar 'mock_tweet' si existe
 df = pd.concat(dfs, ignore_index=True)
 if 'type' in df.columns:
@@ -111,24 +200,29 @@ if 'author' in df.columns:
     df['seguidores'] = df['author'].apply(lambda x: x.get('followers') if isinstance(x, dict) else None)
     df['cuenta'] = df['author'].apply(lambda x: x.get('userName') if isinstance(x, dict) else None)
 else:
-    df['seguidores'] = df.get('followers', None)
-    df['cuenta'] = df.get('username', None)
+    if 'followers' in df.columns:
+        df['seguidores'] = df['followers']
+    else:
+        df['seguidores'] = 0
+    if 'username' in df.columns:
+        df['cuenta'] = df['username']
+    else:
+        df['cuenta'] = ''
 
-# Asegurarse columnas de conteos existan; si no, crear con 0
 for col in ['likeCount', 'replyCount', 'retweetCount', 'quoteCount', 'bookmarkCount', 'viewCount']:
     if col not in df.columns:
         df[col] = 0
 
-# métricas
-df['interacciones'] = (df['likeCount'].fillna(0).astype(int)
-                       + df['replyCount'].fillna(0).astype(int)
-                       + df['retweetCount'].fillna(0).astype(int)
-                       + df['quoteCount'].fillna(0).astype(int)
-                       + df['bookmarkCount'].fillna(0).astype(int))
-df['compartidos'] = (df['retweetCount'].fillna(0).astype(int)
-                     + df['quoteCount'].fillna(0).astype(int))
+for col in ['likeCount', 'replyCount', 'retweetCount', 'quoteCount', 'bookmarkCount', 'viewCount']:
+    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-# renombrar columnas al mapa deseado (si existen)
+df['interacciones'] = (df['likeCount']
+                       + df['replyCount']
+                       + df['retweetCount']
+                       + df['quoteCount']
+                       + df['bookmarkCount'])
+df['compartidos'] = (df['retweetCount'] + df['quoteCount'])
+
 rename_map = {
     'createdAt': 'fecha',
     'url': 'link',
@@ -138,12 +232,10 @@ rename_map = {
     'retweetCount': 'retweets',
     'quoteCount': 'citas',
     'bookmarkCount': 'guardados',
-    'text': 'text'
 }
 existing_rename = {k: v for k, v in rename_map.items() if k in df.columns}
 df = df.rename(columns=existing_rename)
 
-# si 'text' no existe, intentar otros campos
 if 'text' not in df.columns:
     for alt in ['content', 'title', 'html']:
         if alt in df.columns:
@@ -152,31 +244,26 @@ if 'text' not in df.columns:
     else:
         df['text'] = ''
 
-# filtrar replies que comienzan con '@'
 df = df[~df['text'].str.startswith('@', na=False)]
 
-df['impresiones'] = df['impresiones'].astype(int)
-df['interacciones'] = df['interacciones'].astype(int)
-df['compartidos'] = df['compartidos'].astype(int)
-df['likes'] = df['likes'].astype(int)
-df['comentarios'] = df['comentarios'].astype(int)
-df['retweets'] = df['retweets'].astype(int)
-df['citas'] = df['citas'].astype(int)
-df['guardados'] = df['guardados'].astype(int)
+for col in ['impresiones', 'interacciones', 'compartidos', 'likes', 'comentarios', 'retweets', 'citas', 'guardados', 'seguidores']:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+    else:
+        df[col] = 0
 
-# formatear 'fecha' como YYYY-MM-DD HH:MM:SS
-if 'fecha' in df.columns:
-    df['fecha'] = pd.to_datetime(df['fecha'], errors='coerce', utc=True).dt.tz_convert(TZ_ARGENTINA)
-    df['fecha'] = df['fecha'].dt.strftime('%Y-%m-%d %H:%M:%S')
+if 'fecha' in df.columns and df['fecha'].notna().any():
+    df['fecha'] = pd.to_datetime(df['fecha'], errors='coerce', utc=True)
+    mask_valid = df['fecha'].notna()
+    df.loc[mask_valid, 'fecha'] = df.loc[mask_valid, 'fecha'].dt.tz_convert(TZ_ARGENTINA).dt.strftime('%Y-%m-%d %H:%M:%S')
+    df.loc[~mask_valid, 'fecha'] = ''
 else:
     df['fecha'] = ''
 
-# Asegurarse columnas objetivo existen; crear vacías donde hagan falta
 for col in header:
     if col not in df.columns:
         df[col] = ''
 
-# Seleccionar sólo las columnas deseadas en el orden correcto
 final_df = df[header].copy()
 
 # === Leer registros existentes en la hoja TWEETS!A:M ===
@@ -195,22 +282,25 @@ if values:
 else:
     existing_df = pd.DataFrame(columns=header)
 
-# Asegurar columna 'link' en existing_df
 if 'link' not in existing_df.columns:
     existing_df['link'] = ''
 
-# === Concatenar y limpiar duplicados por 'link' ===
 combined_df = pd.concat([existing_df, final_df], ignore_index=True, sort=False)
+combined_df['link'] = combined_df['link'].astype(str).fillna('').str.strip()
 
-if 'link' in combined_df.columns and combined_df['link'].notna().any():
-    combined_df = combined_df.drop_duplicates(subset=["link"])
+if combined_df['link'].str.strip().ne('').any():
+    combined_df = combined_df.drop_duplicates(subset=["link"], keep='first')
 else:
-    combined_df = combined_df.drop_duplicates()
+    combined_df = combined_df.drop_duplicates(keep='first')
 
-# Convertir todo a string y rellenar NaN
 combined_df = combined_df.astype(str).fillna('')
 
-# === Sobrescribir hoja: limpiar rango TWEETS!A:M y escribir ===
+for col in header:
+    if col not in combined_df.columns:
+        combined_df[col] = ''
+
+combined_df = combined_df[header]
+
 try:
     sheet.values().clear(
         spreadsheetId=SPREADSHEET_ID,
@@ -219,7 +309,7 @@ try:
 except Exception as e:
     print(f"Warning: no pude limpiar el rango antes de escribir: {e}")
 
-values_to_write = [header] + combined_df[header].values.tolist()
+values_to_write = [header] + combined_df.values.tolist()
 
 try:
     sheet.values().update(
