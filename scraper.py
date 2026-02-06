@@ -50,7 +50,7 @@ QUERIES = os.getenv(
     "tik-tok,tiktok,tiktok suicidio,tiktok grooming,tiktok armas,tiktok drogas,tiktok violacion,tiktok delincuentes,tiktok ladrones,tiktok narcos"
 ).split(",")
 MAX_ITEMS = int(os.getenv("MAX_ITEMS", "500"))   # keep reasonable for CI; tune later if needed
-TIME_PERIOD = os.getenv("TIME_PERIOD", "last_hour")  # default as your original script
+TIME_PERIOD = os.getenv("TIME_PERIOD", "last_day")  # default as your original script
 ACTOR_ID = os.getenv("ACTOR_ID", "easyapi/google-news-scraper")
 
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
