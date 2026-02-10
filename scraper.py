@@ -127,7 +127,7 @@ for query in QUERIES:
     for country in COUNTRIES:
         run_input = {
             "cr": country,
-            "maxItems": MAZ_ITEMS,
+            "maxItems": MAX_ITEMS,
             "query": query,
             "time_period": TIME_PERIOD
         }
