@@ -311,7 +311,7 @@ after_tot = len(final_df)
 logging.info("After body verification filter: %d -> %d rows (removed %d)", before_tot, after_tot, before_tot - after_tot)
 
 # Ensure column order and presence
-header = ['semana','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at','query','article_body']
+header = ['semana','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at','query']
 final_df = final_df.reindex(columns=header, fill_value='')
 
 # --- Read existing sheet and combine ---
