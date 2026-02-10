@@ -9,3 +9,6 @@ pytz
 requests
 google-generativeai
 packaging
+newspaper3k
+lxml
+nltk
