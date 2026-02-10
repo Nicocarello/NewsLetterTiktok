@@ -156,6 +156,8 @@ for query in QUERIES:
     for country in COUNTRIES:
         run_input = {
             "cr": country,
+            "gl": country,
+            "lr": "lang_es",
             "maxItems": MAX_ITEMS,
             "query": query,
             "time_period": TIME_PERIOD
