@@ -43,7 +43,7 @@ if not APIFY_TOKEN:
 COUNTRIES = [c.strip() for c in os.getenv("COUNTRIES", "ar,cl,pe").split(",") if c.strip()]
 QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
-    "tik-tok,tiktok,tiktok suicidio,tiktok grooming,tiktok armas,tiktok drogas,tiktok violacion,tiktok delincuentes,tiktok ladrones,tiktok narcos"
+    "tik-tok,tiktok,tiktok suicidio,tiktok grooming,tiktok armas,tiktok drogas,tiktok violacion,tiktok delincuentes,tiktok ladrones,tiktok narcos,tiktok estafa"
 ).split(",") if q.strip()]
 
 try:
@@ -127,13 +127,11 @@ for query in QUERIES:
     for country in COUNTRIES:
         run_input = {
             "cr": country,
-            "gl": country,
-            "hl": "es-419",
-            "lr": "lang_es",
-            "maxItems": MAX_ITEMS,
+            "maxItems": MAZ_ITEMS,
             "query": query,
-            "time_period": TIME_PERIOD,
+            "time_period": TIME_PERIOD
         }
+    
         logging.info("Ejecutando actor %s para %s con query '%s'...", ACTOR_ID, country, query)
         try:
             run = retry(lambda: apify_client.actor(ACTOR_ID).call(run_input=run_input), max_attempts=4)
