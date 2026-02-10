@@ -185,7 +185,7 @@ final_df = final_df.reindex(columns=header, fill_value='')
 
 # --- Read existing sheet and combine ---
 try:
-    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range="Data!A:J").execute()
+    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range="2026!A:J").execute()
     values = result.get("values", [])
 except HttpError as e:
     logging.exception("Failed to read existing sheet: %s", e)
@@ -281,12 +281,12 @@ if bad_cells:
 
 # --- Write to sheet with diagnostics on HttpError ---
 try:
-    logging.info("Clearing target range Data!A:J ...")
-    sheet.values().clear(spreadsheetId=SPREADSHEET_ID, range="Data!A:J").execute()
+    logging.info("Clearing target range 2026!A:J ...")
+    sheet.values().clear(spreadsheetId=SPREADSHEET_ID, range="2026!A:J").execute()
     logging.info("Updating sheet with %d rows (incl header)...", len(body_values))
     sheet.values().update(
         spreadsheetId=SPREADSHEET_ID,
-        range="Data!A1",
+        range="2026!A1",
         valueInputOption="RAW",
         body={"values": body_values}
     ).execute()
