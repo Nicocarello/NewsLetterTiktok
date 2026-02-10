@@ -311,11 +311,12 @@ after_tot = len(final_df)
 logging.info("After body verification filter: %d -> %d rows (removed %d)", before_tot, after_tot, before_tot - after_tot)
 
 # Ensure column order and presence
-header = ['semana','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at','query']
+header = ['semana','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
+final_df = final_df.drop_duplicates(subset='link')
 
 # --- Read existing sheet and combine ---
-SHEET_RANGE = "2026!A:K"  # cambia si corresponde
+SHEET_RANGE = "2026!A:J"  # cambia si corresponde
 try:
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
     values = result.get("values", [])
