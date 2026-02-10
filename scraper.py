@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-robust_scraper_fixed.py
-
-Versión revisada y con defensas adicionales del scraper Google News -> Google Sheets.
-"""
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.errors import HttpError
@@ -22,6 +16,12 @@ import math
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+
+# --- Additional imports for body extraction ---
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from newspaper import Article
+import requests
+import re
 
 # --- Config / Env checks ---
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -133,7 +133,7 @@ for query in QUERIES:
             "query": query,
             "time_period": TIME_PERIOD
         }
-    
+
         logging.info("Ejecutando actor %s para %s con query '%s'...", ACTOR_ID, country, query)
         try:
             run = retry(lambda: apify_client.actor(ACTOR_ID).call(run_input=run_input), max_attempts=4)
@@ -158,6 +158,8 @@ for query in QUERIES:
 
         df = pd.DataFrame(items)
         df["country"] = country
+        # Añadir trazabilidad: qué query generó este item
+        df["query"] = query
         df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
         all_dfs.append(df)
 
@@ -188,12 +190,132 @@ try:
 except Exception:
     final_df['scraped_at'] = final_df['scraped_at'].astype(str).fillna('')
 
+# --- EXTRA: fetch article bodies with newspaper3k + requests (ThreadPool + simple cache) ---
+# Configurables (puedes moverlos a envvars si querés)
+CACHE_PATH = os.getenv("ARTICLE_CACHE_PATH", "article_cache.json")
+MAX_FETCH_WORKERS = int(os.getenv("MAX_FETCH_WORKERS", "6"))
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "15"))  # seconds
+REQUEST_RETRIES = int(os.getenv("REQUEST_RETRIES", "2"))
+REQUEST_SLEEP_BETWEEN = float(os.getenv("REQUEST_SLEEP_BETWEEN", "0.2"))  # polite small delay
+
+# Regex para detectar 'tiktok' y variantes
+TIKTOK_PATTERN = re.compile(r"tik\s*-?\s*tok", flags=re.IGNORECASE)
+
+# --- Simple cache helper (link -> body) ---
+def load_cache(path):
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:
+            return {}
+    return {}
+
+def save_cache(path, data):
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.warning("No se pudo guardar cache en %s: %s", path, e)
+
+article_cache = load_cache(CACHE_PATH)
+
+# Normalizar URL como key (puede ser la URL completa)
+def url_key(url):
+    return url.strip()
+
+# Fetch HTML with requests + retries
+def fetch_html(url):
+    headers = {
+        "User-Agent": os.getenv("FETCH_USER_AGENT", "Mozilla/5.0 (compatible; PublicBot/1.0; +https://publicalatam.com)"),
+        "Accept-Language": "es-ES,es;q=0.9,en;q=0.8"
+    }
+    for attempt in range(REQUEST_RETRIES + 1):
+        try:
+            resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+            # follow redirects by default; check status
+            if resp.status_code == 200 and resp.text:
+                return resp.text
+            else:
+                logging.debug("fetch_html: %s returned status %d", url, resp.status_code)
+        except requests.RequestException as e:
+            logging.debug("fetch_html attempt %d for %s failed: %s", attempt+1, url, e)
+        # small sleep before retry
+        time.sleep(0.5 + REQUEST_SLEEP_BETWEEN * attempt)
+    return None
+
+# Extract article text using newspaper3k but passing HTML we fetched
+def extract_body_from_html(url, html):
+    try:
+        a = Article(url, language='es')
+        a.set_html(html)
+        a.parse()
+        text = a.text or ''
+        return text.strip()
+    except Exception as e:
+        logging.debug("newspaper parse failed for %s: %s", url, e)
+        return ''
+
+# Combined fetch+parse function for executor
+def fetch_and_parse(url):
+    key = url_key(url)
+    # check cache
+    if key in article_cache:
+        return key, article_cache[key]
+    html = fetch_html(url)
+    if not html:
+        # fallback: empty string
+        article_cache[key] = ''
+        return key, ''
+    body = extract_body_from_html(url, html)
+    article_cache[key] = body
+    # polite small delay
+    time.sleep(REQUEST_SLEEP_BETWEEN)
+    return key, body
+
+# --- Prepare unique links to fetch ---
+links_series = final_df['link'].dropna().astype(str)
+unique_links = links_series.unique().tolist()
+logging.info("Starting article fetch: %d unique links (cache hits: %d)", len(unique_links),
+             sum(1 for l in unique_links if url_key(l) in article_cache))
+
+# Run threaded fetch/parsing
+link_to_body = {}
+with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
+    futures = {ex.submit(fetch_and_parse, url): url for url in unique_links}
+    for fut in as_completed(futures):
+        url = futures[fut]
+        try:
+            key, body = fut.result()
+            link_to_body[key] = body or ''
+        except Exception as e:
+            logging.warning("Error fetching/parsing %s: %s", url, e)
+            link_to_body[url] = ''
+
+# Persist cache (best-effort)
+save_cache(CACHE_PATH, article_cache)
+
+# Map bodies back into final_df
+final_df['link'] = final_df['link'].astype(str)
+final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_key(u), '')).fillna('')
+
+# --- Filtering: keep rows that mention the pattern in title OR snippet OR article_body ---
+mask = (
+    final_df['title'].str.contains(TIKTOK_PATTERN, na=False) |
+    final_df['snippet'].str.contains(TIKTOK_PATTERN, na=False) |
+    final_df['article_body'].str.contains(TIKTOK_PATTERN, na=False)
+)
+before_tot = len(final_df)
+final_df = final_df[mask].copy()
+after_tot = len(final_df)
+logging.info("After body verification filter: %d -> %d rows (removed %d)", before_tot, after_tot, before_tot - after_tot)
+
 # Ensure column order and presence
-header = ['semana','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
+header = ['semana','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at','query','article_body']
 final_df = final_df.reindex(columns=header, fill_value='')
 
 # --- Read existing sheet and combine ---
-SHEET_RANGE = "2026!A:J"  # cambia si corresponde
+SHEET_RANGE = "2026!A:L"  # cambia si corresponde
 try:
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
     values = result.get("values", [])
