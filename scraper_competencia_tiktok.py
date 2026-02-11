@@ -45,17 +45,17 @@ QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
     (
         # YouTube
-        "youtube"
+        "youtube",
         # Google
-        "google"
+        "google",
         # Instagram
-        "instagram"
+        "instagram",
         # Facebook
-        "facebook"
+        "facebook",
         # Snapchat
-        "snapchat"
+        "snapchat",
         # X / Twitter
-        "twitter"
+        "twitter",
         # Twitch
         "twitch"
     )
@@ -203,8 +203,13 @@ except Exception:
     final_df['scraped_at'] = final_df['scraped_at'].astype(str).fillna('')
 
 # Ensure column order and presence
-header = ['semana','date_utc','country','title','link','domain','snippet','tag','sentiment','scraped_at']
+header = ['date_utc','country','title','link','domain','snippet','scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
+
+#keep rows that contain youtube, facebook, instagram, snapchat, twitter, twitch, google in the title or snippet (case-insensitive)
+keywords = ['youtube', 'facebook', 'instagram', 'snapchat', 'twitter', 'twitch', 'google']
+pattern = '|'.join(keywords)
+final_df = final_df[final_df['title'].str.contains(pattern, case=False, na=False) | final_df['snippet'].str.contains(pattern, case=False, na=False)]
 
 # --- Read existing sheet and combine ---
 SHEET_RANGE = "Competencia!A:J"  # cambia si corresponde
