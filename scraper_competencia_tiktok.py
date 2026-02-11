@@ -192,9 +192,7 @@ else:
 final_df = safe_convert_date_col(final_df, 'date_utc')
 
 # Additional columns
-final_df['sentiment'] = ''
-final_df['semana'] = ''
-final_df['tag'] = ''
+
 # Map short country codes to names (defensivo)
 final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
 
@@ -209,7 +207,7 @@ header = ['semana','date_utc','country','title','link','domain','snippet','tag',
 final_df = final_df.reindex(columns=header, fill_value='')
 
 # --- Read existing sheet and combine ---
-SHEET_RANGE = "2026 - Competencia!A:J"  # cambia si corresponde
+SHEET_RANGE = "Competencia!A:J"  # cambia si corresponde
 try:
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
     values = result.get("values", [])
