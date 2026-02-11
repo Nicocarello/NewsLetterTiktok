@@ -45,32 +45,19 @@ QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
     (
         # YouTube
-        "youtube,youtube suicidio,youtube grooming,youtube armas,youtube drogas,"
-        "youtube violacion,youtube delincuentes,youtube ladrones,youtube narcos,youtube estafa,"
+        "youtube"
         # Google
-        "google,google suicidio,google grooming,google armas,google drogas,"
-        "google violacion,google delincuentes,google ladrones,google narcos,google estafa,"
+        "google"
         # Instagram
-        "instagram,instagram suicidio,instagram grooming,instagram armas,instagram drogas,"
-        "instagram violacion,instagram delincuentes,instagram ladrones,instagram narcos,instagram estafa,"
+        "instagram"
         # Facebook
-        "facebook,facebook suicidio,facebook grooming,facebook armas,facebook drogas,"
-        "facebook violacion,facebook delincuentes,facebook ladrones,facebook narcos,facebook estafa,"
+        "facebook"
         # Snapchat
-        "snapchat,snapchat suicidio,snapchat grooming,snapchat armas,snapchat drogas,"
-        "snapchat violacion,snapchat delincuentes,snapchat ladrones,snapchat narcos,snapchat estafa,"
+        "snapchat"
         # X / Twitter
-        "twitter,twitter suicidio,twitter grooming,twitter armas,twitter drogas,"
-        "twitter violacion,twitter delincuentes,twitter ladrones,twitter narcos,twitter estafa,"
-        # Netflix
-        "netflix,netflix suicidio,netflix grooming,netflix armas,netflix drogas,"
-        "netflix violacion,netflix delincuentes,netflix ladrones,netflix narcos,netflix estafa,"
+        "twitter"
         # Twitch
-        "twitch,twitch suicidio,twitch grooming,twitch armas,twitch drogas,"
-        "twitch violacion,twitch delincuentes,twitch ladrones,twitch narcos,twitch estafa,"
-        # Pinterest
-        "pinterest,pinterest suicidio,pinterest grooming,pinterest armas,pinterest drogas,"
-        "pinterest violacion,pinterest delincuentes,pinterest ladrones,pinterest narcos,pinterest estafa"
+        "twitch"
     )
 ).split(",") if q.strip()]
 
