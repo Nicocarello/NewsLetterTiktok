@@ -212,7 +212,7 @@ pattern = '|'.join(keywords)
 final_df = final_df[final_df['title'].str.contains(pattern, case=False, na=False) | final_df['snippet'].str.contains(pattern, case=False, na=False)]
 
 # --- Read existing sheet and combine ---
-SHEET_RANGE = "Competencia!A:J"  # cambia si corresponde
+SHEET_RANGE = "Competencia!A:G"  # cambia si corresponde
 try:
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
     values = result.get("values", [])
