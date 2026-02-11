@@ -304,7 +304,7 @@ try:
     logging.info("Updating sheet con %d filas (incl header)...", len(body_values))
     sheet.values().update(
         spreadsheetId=SPREADSHEET_ID,
-        range="2026 - Competencia!A1",
+        range="Competencia!A1",
         valueInputOption="RAW",
         body={"values": body_values}
     ).execute()
