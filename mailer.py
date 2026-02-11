@@ -30,7 +30,7 @@ def get_sheet_data():
     """Descarga los datos de la hoja de Google Sheets"""
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range="Data!A:J"
+        range="2026!A:J"
     ).execute()
     values = result.get("values", [])
     if not values:
