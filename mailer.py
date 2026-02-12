@@ -132,16 +132,31 @@ def format_email_html(df, window_label):
 
         # Render de una noticia
         def render_card(row):
-            # Campos (seguro usando .get para no romper si falta alguna columna)
-            tag = (row.get("tag") or row.get("tag_norm") or "").strip()
-            title = row.get("title", "").strip()
-            snippet = row.get("snippet", "").strip()
-            source = row.get("source", row.get("domain", "")).strip()
-            tier = row.get("tier", "").strip()
-            sentiment = row.get("sentiment_norm", row.get("sentiment", "NEUTRO")).strip()
-            link = row.get("link", "").strip()
+            import pandas as _pd
         
-            # Tag destacado (puedes cambiar el color aquí si querés)
+            # helper seguro: devuelve "" si es NaN/None, si no str(valor).strip()
+            def s(v):
+                if v is None:
+                    return ""
+                # pandas NaN es float('nan')
+                try:
+                    # _pd.isna cubre np.nan, None, pd.NaT
+                    if _pd.isna(v):
+                        return ""
+                except Exception:
+                    pass
+                return str(v).strip()
+        
+            tag = s(row.get("tag") or row.get("tag_norm"))
+            title = s(row.get("title"))
+            snippet = s(row.get("snippet"))
+            # source puede venir como "source" o "domain"
+            source = s(row.get("source") or row.get("domain"))
+            tier = s(row.get("tier"))
+            sentiment = s(row.get("sentiment_norm") or row.get("sentiment") or "NEUTRO")
+            link = s(row.get("link"))
+        
+            # Tag destacado
             tag_html = ""
             if tag:
                 tag_html = (
@@ -150,22 +165,18 @@ def format_email_html(df, window_label):
                     f"font-family:Arial,Helvetica,sans-serif;text-transform:uppercase'>{tag}</div>"
                 )
         
-            # Card HTML (nuevo formato pedido)
+            # Card HTML (mantengo el formato que definiste)
             return (
                 "<div style='background:#fff;border:1px solid #e6e6e6;border-radius:8px;"
                 "padding:14px;margin-bottom:16px;box-shadow:0 2px 3px rgba(0,0,0,0.04);'>"
                 f"{tag_html}"
-                # Title: más grande y en negrita
                 f"<h3 style='margin:6px 0 8px;font-size:20px;font-weight:800;color:#111;"
                 "font-family:Arial,Helvetica,sans-serif;line-height:1.1'>{title}</h3>"
-                # Snippet: tamaño menor y letra normal
                 f"<p style='margin:0 0 12px;font-size:13px;color:#444;font-family:Arial,Helvetica,sans-serif;"
                 "line-height:1.4'>{snippet}</p>"
-                # Línea divisoria
                 "<hr style='border:none;border-top:1px solid #f0f0f0;margin:10px 0 12px;'>"
-                # Meta (Media / Tier / Sentiment / Article)
                 "<p style='margin:0;font-size:13px;color:#555;font-family:Arial,Helvetica,sans-serif;line-height:1.4'>"
-                f"<strong>Media:</strong> {source} &nbsp;|&nbsp; "
+                f"<strong>Media:</strong> {source or '—'} &nbsp;|&nbsp; "
                 f"<strong>Tier:</strong> {tier or '—'} &nbsp;|&nbsp; "
                 f"<strong>Sentiment:</strong> {sentiment or 'NEUTRO'} &nbsp;|&nbsp; "
                 f"<strong>Article:</strong> "
