@@ -177,8 +177,8 @@ def format_email_html(df, window_label):
             if tag:
                 tag_html = (
                     f"<div style='display:inline-block;padding:3px 8px;border-radius:1px;"
-                    f"background:#fe3355;color:#fff;font-weight:bold;font-size:10px;margin-bottom:8px;"
-                    f"font-family:Arial,sans-serif;text-transform:uppercase'>{tag}</div>"
+                    f"background:#fe3355;color:#fff;font-weight:bold;font-size:12px;margin-bottom:8px;"
+                    f"font-family:Helvetica,sans-serif;text-transform:uppercase'>{tag}</div>"
                 )
         
             # --- 2. HTML con layout vertical ---
@@ -191,7 +191,7 @@ def format_email_html(df, window_label):
                 
                 # Título
                 f"<h3 style='margin:5px 0 10px;font-size:36px;font-weight:700;color:#202124;"
-                f"font-family:Arial,sans-serif;line-height:1.3'>"
+                f"font-family:Helvetica,sans-serif;line-height:1.3'>"
                 f"<a href='{link}' style='text-decoration:none;color:#000000'>{title}</a></h3>"
                 
                 # Resumen
