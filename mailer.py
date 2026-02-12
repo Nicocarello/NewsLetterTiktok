@@ -184,7 +184,7 @@ def format_email_html(df, window_label):
             # Usamos divs independientes para Media, Tier, Sentiment y Article
             return (
                 f"<div style='background:#fff;border:1px solid #e0e0e0;border-radius:8px;"
-                f"padding:15px;margin:0 auto 15px auto;width:50%;"
+                f"padding:15px;margin:0 auto 15px auto;width:65%;"
                 f"box-shadow:0 1px 2px rgba(0,0,0,0.05);'>"
                 f"{tag_html}"
                 
@@ -239,17 +239,17 @@ def format_email_html(df, window_label):
             for _, row in sort_news(block).iterrows():
                 body.append(render_card(row))
 
-        # # Tags no listadas
-        # if not unknown.empty:
-        #     for t in sorted(unknown["tag_norm"].unique()):
-        #         block = unknown[unknown["tag_norm"] == t]
-        #         body.append(
-        #             f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
-        #             f"color:#222; text-transform:uppercase; letter-spacing:.5px; "
-        #             f"font-size:16px; font-weight:bold;'>{t}</h4>"
-        #         )
-        #         for _, row in sort_news(block).iterrows():
-        #             body.append(render_card(row))
+        # Tags no listadas
+        if not unknown.empty:
+            for t in sorted(unknown["tag_norm"].unique()):
+                block = unknown[unknown["tag_norm"] == t]
+                body.append(
+                    f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
+                    f"color:#222; text-transform:uppercase; letter-spacing:.5px; "
+                    f"font-size:16px; font-weight:bold;'>{t}</h4>"
+                )
+                for _, row in sort_news(block).iterrows():
+                    body.append(render_card(row))
 
     return "\n".join(body)
 
