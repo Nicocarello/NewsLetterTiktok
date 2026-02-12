@@ -316,7 +316,7 @@ final_df = final_df.reindex(columns=header, fill_value='')
 final_df = final_df.drop_duplicates(subset='link')
 
 # --- Read existing sheet and combine ---
-SHEET_RANGE = "2026!A:L"  # cambia si corresponde
+SHEET_RANGE = "2026!A:K"  # cambia si corresponde
 try:
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
     values = result.get("values", [])
