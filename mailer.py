@@ -112,7 +112,7 @@ def format_email_html(df, window_label):
         "<div style='margin-bottom:20px; text-align:center;'>"
         # "<img src='https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/cabezal.png' "
         "<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' "
-        "alt='Header' style='max-width:100%; height:auto;'>"
+        "alt='Header' style='max-width:60%; height:auto;'>"
         "</div>"
     ]
 
