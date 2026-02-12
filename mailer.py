@@ -219,22 +219,21 @@ def format_email_html(df, window_label):
         
             # Card HTML (mantengo el formato que definiste)
             return (
-                "<div style='background:#fff;border:1px solid #e6e6e6;border-radius:8px;"
-                "padding:14px;margin-bottom:16px;box-shadow:0 2px 3px rgba(0,0,0,0.04);'>"
+                f"<div style='background:#fff;border:1px solid #e0e0e0;border-radius:8px;"
+                f"padding:15px;margin-bottom:15px;box-shadow:0 1px 2px rgba(0,0,0,0.05);'>"
                 f"{tag_html}"
-                f"<h3 style='margin:6px 0 8px;font-size:20px;font-weight:800;color:#111;"
-                "font-family:Arial,Helvetica,sans-serif;line-height:1.1'>{title}</h3>"
-                f"<p style='margin:0 0 12px;font-size:13px;color:#444;font-family:Arial,Helvetica,sans-serif;"
-                "line-height:1.4'>{snippet}</p>"
-                "<hr style='border:none;border-top:1px solid #f0f0f0;margin:10px 0 12px;'>"
-                "<p style='margin:0;font-size:13px;color:#555;font-family:Arial,Helvetica,sans-serif;line-height:1.4'>"
-                f"<strong>Media:</strong> {source or '—'} &nbsp;|&nbsp; "
-                f"<strong>Tier:</strong> {tier or '—'} &nbsp;|&nbsp; "
-                f"<strong>Sentiment:</strong> {sentiment or 'NEUTRO'} &nbsp;|&nbsp; "
-                f"<strong>Article:</strong> "
-                f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none'>link</a>"
-                "</p>"
-                "</div>"
+                f"<h3 style='margin:5px 0 10px;font-size:18px;font-weight:700;color:#202124;"
+                f"font-family:Arial,sans-serif;line-height:1.3'>"
+                f"<a href='{link}' style='text-decoration:none;color:#1a0dab'>{title}</a></h3>"
+                f"<p style='margin:0 0 12px;font-size:14px;color:#3c4043;font-family:Arial,sans-serif;"
+                f"line-height:1.5'>{snippet}</p>"
+                f"<div style='border-top:1px solid #f1f3f4;padding-top:10px;font-size:12px;color:#5f6368;font-family:Arial,sans-serif;'>"
+                f"<span>🏛 {source or '—'}</span> &nbsp;|&nbsp; "
+                f"<span>Tier: {tier or '—'}</span> &nbsp;|&nbsp; "
+                f"{sentiment_html} &nbsp;|&nbsp; "
+                f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none;font-weight:bold'>Leer más →</a>"
+                f"</div>"
+                f"</div>"
             )
         
 
