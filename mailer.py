@@ -194,7 +194,7 @@ def format_email_html(df, window_label):
                 f"<a href='{link}' style='text-decoration:none;color:#000000'>{title}</a></h3>"
                 
                 # Resumen
-                f"<p style='margin:0 0 15px;font-size:20px;color:#000000;font-family:Arial,sans-serif;"
+                f"<p style='margin:0 0 15px;font-size:18px;color:#000000;font-family:Arial,sans-serif;"
                 f"line-height:1.5'>{snippet}</p>"
                 
                 # --- SECCIÓN METADATOS VERTICAL ---
