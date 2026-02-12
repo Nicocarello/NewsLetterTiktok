@@ -176,8 +176,8 @@ def format_email_html(df, window_label):
             tag_html = ""
             if tag:
                 tag_html = (
-                    f"<div style='display:inline-block;padding:3px 8px;border-radius:4px;"
-                    f"background:#ff4081;color:#fff;font-weight:bold;font-size:10px;margin-bottom:8px;"
+                    f"<div style='display:inline-block;padding:3px 8px;border-radius:1px;"
+                    f"background:#fe3355;color:#fff;font-weight:bold;font-size:10px;margin-bottom:8px;"
                     f"font-family:Arial,sans-serif;text-transform:uppercase'>{tag}</div>"
                 )
         
