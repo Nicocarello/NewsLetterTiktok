@@ -187,7 +187,8 @@ def format_email_html(df, window_label):
             # Usamos divs independientes para Media, Tier, Sentiment y Article
             return (
                 f"<div style='background:#fff;border:1px solid #e0e0e0;border-radius:8px;"
-                f"padding:15px;margin-bottom:15px;box-shadow:0 1px 2px rgba(0,0,0,0.05);'>"
+                f"padding:15px;margin:0 auto 15px auto;width:50%;"
+                f"box-shadow:0 1px 2px rgba(0,0,0,0.05);'>"
                 f"{tag_html}"
                 
                 # Título
