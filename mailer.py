@@ -7,6 +7,7 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import smtplib
 from email.mime.text import MIMEText
+import re
 
 # === Configuración Google Sheets ===
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
