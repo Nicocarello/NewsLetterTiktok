@@ -112,10 +112,7 @@ def format_email_html(df, window_label):
         "<div style='margin-bottom:20px; text-align:center;'>"
         "<img src='https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/cabezal.png' "
         "alt='Header' style='max-width:100%; height:auto;'>"
-        "</div>",
-        f"<h2 style='font-family:Arial,Helvetica,sans-serif; color:#333; "
-        "border-bottom:2px solid #eee; padding-bottom:8px;'>"
-        f"📰 News collected ({window_label})</h2>"
+        "</div>"
     ]
 
     def sort_news(dfpart):
