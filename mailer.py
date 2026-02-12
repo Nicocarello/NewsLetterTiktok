@@ -79,6 +79,16 @@ COUNTRY_IMAGES = {
     "Peru": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/PERU.png"
 }
 
+def clean_value(val):
+    """Limpia valores nulos o placeholders."""
+    if val is None or pd.isna(val):
+        return ""
+    s_val = str(val).strip()
+    # Regex para detectar placeholders tipo {Title}
+    if re.match(r'^\s*\{.+?\}\s*$', s_val):
+        return ""
+    return s_val
+
 def format_email_html(df, window_label):
     if df.empty:
         return f"<p>No news found for {window_label}.</p>"
