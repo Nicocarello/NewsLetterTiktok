@@ -191,10 +191,10 @@ def format_email_html(df, window_label):
                 # Título
                 f"<h3 style='margin:5px 0 10px;font-size:18px;font-weight:700;color:#202124;"
                 f"font-family:Arial,sans-serif;line-height:1.3'>"
-                f"<a href='{link}' style='text-decoration:none;color:#1a0dab'>{title}</a></h3>"
+                f"<a href='{link}' style='text-decoration:none;color:#FFFFFF'>{title}</a></h3>"
                 
                 # Resumen
-                f"<p style='margin:0 0 15px;font-size:14px;color:#3c4043;font-family:Arial,sans-serif;"
+                f"<p style='margin:0 0 15px;font-size:14px;color:#FFFFFF;font-family:Arial,sans-serif;"
                 f"line-height:1.5'>{snippet}</p>"
                 
                 # --- SECCIÓN METADATOS VERTICAL ---
@@ -202,22 +202,22 @@ def format_email_html(df, window_label):
                 
                 # 1. Media
                 f"<div style='margin-bottom:4px;'>"
-                f"<strong style='color:#5f6368'>Media:</strong> {source or '—'}"
+                f"<strong style='color:#FFFFFF'>Media:</strong> {source or '—'}"
                 f"</div>"
                 
                 # 2. Tier
                 f"<div style='margin-bottom:4px;'>"
-                f"<strong style='color:#5f6368'>Tier:</strong> {tier or '—'}"
+                f"<strong style='color:#FFFFFF'></strong> {tier or '—'}"
                 f"</div>"
                 
                 # 3. Sentiment (Badge al lado del label)
                 f"<div style='margin-bottom:4px;'>"
-                f"<strong style='color:#5f6368'>Sentiment:</strong> {sentiment_badge}"
+                f"<strong style='color:#FFFFFF'>Sentiment:</strong> {sentiment_badge}"
                 f"</div>"
                 
                 # 4. Article (Link)
                 f"<div>"
-                f"<strong style='color:#5f6368'>Article:</strong> "
+                f"<strong style='color:#FFFFFF'>Article:</strong> "
                 f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none;font-weight:bold'>Leer nota →</a>"
                 f"</div>"
                 
