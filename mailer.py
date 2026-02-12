@@ -133,28 +133,48 @@ def format_email_html(df, window_label):
         # Render de una noticia
         def render_card(row):
             import pandas as _pd
+            import re
         
             # helper seguro: devuelve "" si es NaN/None, si no str(valor).strip()
             def s(v):
                 if v is None:
                     return ""
-                # pandas NaN es float('nan')
                 try:
-                    # _pd.isna cubre np.nan, None, pd.NaT
                     if _pd.isna(v):
                         return ""
                 except Exception:
                     pass
                 return str(v).strip()
         
-            tag = s(row.get("tag") or row.get("tag_norm"))
-            title = s(row.get("title"))
-            snippet = s(row.get("snippet"))
-            # source puede venir como "source" o "domain"
-            source = s(row.get("source") or row.get("domain"))
-            tier = s(row.get("tier"))
-            sentiment = s(row.get("sentiment_norm") or row.get("sentiment") or "NEUTRO")
-            link = s(row.get("link"))
+            # helper para considerar valores que son placeholders tipo {title}
+            placeholder_re = re.compile(r'^\s*\{.+\}\s*$')
+        
+            # helper para obtener con fallback de varios nombres
+            def get_fallback(row, keys):
+                for k in keys:
+                    val = row.get(k)
+                    if val is None:
+                        continue
+                    sv = s(val)
+                    if sv and not placeholder_re.match(sv):
+                        return sv
+                return ""
+        
+            # intentos de nombre de columna para title/snippet/source/tier/sentiment/link/tag
+            title = get_fallback(row, ["title", "Title", "titulo", "Título", "headline", "Headline", "d", "D"])
+            if not title:
+                # último intento: si existe una columna 'D' literal en el DataFrame header
+                title = s(row.get("D", ""))
+        
+            snippet = get_fallback(row, ["snippet", "Snippet", "resumen", "Resumen", "h", "H", "body", "texto"])
+            if not snippet:
+                snippet = s(row.get("H", ""))
+        
+            tag = get_fallback(row, ["tag", "Tag", "categoria", "category", "i", "I"])
+            source = get_fallback(row, ["source", "domain", "Source", "Domain", "g", "G"])
+            tier = get_fallback(row, ["tier", "Tier", "nivel", "L", "l"])
+            sentiment = get_fallback(row, ["sentiment_norm", "sentiment", "Sentiment", "J", "j"]) or "NEUTRO"
+            link = get_fallback(row, ["link", "Link", "url", "URL", "E", "e"])
         
             # Tag destacado
             tag_html = ""
@@ -165,6 +185,26 @@ def format_email_html(df, window_label):
                     f"font-family:Arial,Helvetica,sans-serif;text-transform:uppercase'>{tag}</div>"
                 )
         
+            # Card HTML (mantengo el formato que definiste)
+            return (
+                "<div style='background:#fff;border:1px solid #e6e6e6;border-radius:8px;"
+                "padding:14px;margin-bottom:16px;box-shadow:0 2px 3px rgba(0,0,0,0.04);'>"
+                f"{tag_html}"
+                f"<h3 style='margin:6px 0 8px;font-size:20px;font-weight:800;color:#111;"
+                "font-family:Arial,Helvetica,sans-serif;line-height:1.1'>{title}</h3>"
+                f"<p style='margin:0 0 12px;font-size:13px;color:#444;font-family:Arial,Helvetica,sans-serif;"
+                "line-height:1.4'>{snippet}</p>"
+                "<hr style='border:none;border-top:1px solid #f0f0f0;margin:10px 0 12px;'>"
+                "<p style='margin:0;font-size:13px;color:#555;font-family:Arial,Helvetica,sans-serif;line-height:1.4'>"
+                f"<strong>Media:</strong> {source or '—'} &nbsp;|&nbsp; "
+                f"<strong>Tier:</strong> {tier or '—'} &nbsp;|&nbsp; "
+                f"<strong>Sentiment:</strong> {sentiment or 'NEUTRO'} &nbsp;|&nbsp; "
+                f"<strong>Article:</strong> "
+                f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none'>link</a>"
+                "</p>"
+                "</div>"
+            )
+
             # Card HTML (mantengo el formato que definiste)
             return (
                 "<div style='background:#fff;border:1px solid #e6e6e6;border-radius:8px;"
