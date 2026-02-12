@@ -135,7 +135,6 @@ def format_email_html(df, window_label):
             import pandas as _pd
             import re
         
-            # helper seguro: devuelve "" si es NaN/None, si no str(valor).strip()
             def s(v):
                 if v is None:
                     return ""
@@ -146,35 +145,68 @@ def format_email_html(df, window_label):
                     pass
                 return str(v).strip()
         
-            # helper para considerar valores que son placeholders tipo {title}
-            placeholder_re = re.compile(r'^\s*\{.+\}\s*$')
+            placeholder_re = re.compile(r'^\s*\{(.+?)\}\s*$')
         
-            # helper para obtener con fallback de varios nombres
-            def get_fallback(row, keys):
+            # obtenciones previas intentando nombres comunes
+            def get_first_non_placeholder(keys):
                 for k in keys:
-                    val = row.get(k)
-                    if val is None:
+                    v = row.get(k)
+                    if v is None:
                         continue
-                    sv = s(val)
+                    sv = s(v)
                     if sv and not placeholder_re.match(sv):
                         return sv
                 return ""
         
-            # intentos de nombre de columna para title/snippet/source/tier/sentiment/link/tag
-            title = get_fallback(row, ["title", "Title", "titulo", "Título", "headline", "Headline", "d", "D"])
-            if not title:
-                # último intento: si existe una columna 'D' literal en el DataFrame header
-                title = s(row.get("D", ""))
+            # 1) intentos por nombres "normales"
+            title = get_first_non_placeholder(["title", "Title", "titulo", "Título", "headline", "Headline", "d", "D"])
+            snippet = get_first_non_placeholder(["snippet", "Snippet", "resumen", "Resumen", "h", "H", "body", "texto"])
         
-            snippet = get_fallback(row, ["snippet", "Snippet", "resumen", "Resumen", "h", "H", "body", "texto"])
-            if not snippet:
-                snippet = s(row.get("H", ""))
+            # 2) si son placeholders o vacíos: probar la columna literal "D" y "H"
+            if not title or placeholder_re.match(title):
+                try:
+                    cand = row.get("D", None)
+                    cand_s = s(cand)
+                    if cand_s and not placeholder_re.match(cand_s):
+                        title = cand_s
+                except Exception:
+                    pass
         
-            tag = get_fallback(row, ["tag", "Tag", "categoria", "category", "i", "I"])
-            source = get_fallback(row, ["source", "domain", "Source", "Domain", "g", "G"])
-            tier = get_fallback(row, ["tier", "Tier", "nivel", "L", "l"])
-            sentiment = get_fallback(row, ["sentiment_norm", "sentiment", "Sentiment", "J", "j"]) or "NEUTRO"
-            link = get_fallback(row, ["link", "Link", "url", "URL", "E", "e"])
+            if not snippet or placeholder_re.match(snippet):
+                try:
+                    cand = row.get("H", None)
+                    cand_s = s(cand)
+                    if cand_s and not placeholder_re.match(cand_s):
+                        snippet = cand_s
+                except Exception:
+                    pass
+        
+            # 3) fallback posicional seguro (D = index 3, H = index 7) si sigue sin valor
+            if (not title or placeholder_re.match(title)):
+                try:
+                    cand = row.iloc[3]  # columna D (0-based index)
+                    cand_s = s(cand)
+                    if cand_s and not placeholder_re.match(cand_s):
+                        title = cand_s
+                except Exception:
+                    # no hacer nada si no existe la posición
+                    pass
+        
+            if (not snippet or placeholder_re.match(snippet)):
+                try:
+                    cand = row.iloc[7]  # columna H (0-based index)
+                    cand_s = s(cand)
+                    if cand_s and not placeholder_re.match(cand_s):
+                        snippet = cand_s
+                except Exception:
+                    pass
+        
+            # resto de campos (sin cambios)
+            tag = get_first_non_placeholder(["tag", "Tag", "categoria", "category", "i", "I"])
+            source = get_first_non_placeholder(["source", "domain", "Source", "Domain", "g", "G"])
+            tier = get_first_non_placeholder(["tier", "Tier", "nivel", "L", "l"])
+            sentiment = get_first_non_placeholder(["sentiment_norm", "sentiment", "Sentiment", "J", "j"]) or "NEUTRO"
+            link = get_first_non_placeholder(["link", "Link", "url", "URL", "E", "e"])
         
             # Tag destacado
             tag_html = ""
@@ -204,26 +236,7 @@ def format_email_html(df, window_label):
                 "</p>"
                 "</div>"
             )
-
-            # Card HTML (mantengo el formato que definiste)
-            return (
-                "<div style='background:#fff;border:1px solid #e6e6e6;border-radius:8px;"
-                "padding:14px;margin-bottom:16px;box-shadow:0 2px 3px rgba(0,0,0,0.04);'>"
-                f"{tag_html}"
-                f"<h3 style='margin:6px 0 8px;font-size:20px;font-weight:800;color:#111;"
-                "font-family:Arial,Helvetica,sans-serif;line-height:1.1'>{title}</h3>"
-                f"<p style='margin:0 0 12px;font-size:13px;color:#444;font-family:Arial,Helvetica,sans-serif;"
-                "line-height:1.4'>{snippet}</p>"
-                "<hr style='border:none;border-top:1px solid #f0f0f0;margin:10px 0 12px;'>"
-                "<p style='margin:0;font-size:13px;color:#555;font-family:Arial,Helvetica,sans-serif;line-height:1.4'>"
-                f"<strong>Media:</strong> {source or '—'} &nbsp;|&nbsp; "
-                f"<strong>Tier:</strong> {tier or '—'} &nbsp;|&nbsp; "
-                f"<strong>Sentiment:</strong> {sentiment or 'NEUTRO'} &nbsp;|&nbsp; "
-                f"<strong>Article:</strong> "
-                f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none'>link</a>"
-                "</p>"
-                "</div>"
-            )
+        
 
         # Tags conocidas
         for t in orderTags:
