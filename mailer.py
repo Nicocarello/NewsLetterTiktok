@@ -132,17 +132,45 @@ def format_email_html(df, window_label):
 
         # Render de una noticia
         def render_card(row):
-            sentiment_html = sentiment_badge(row.get("sentiment_norm", "NEUTRO"))
+            # Campos (seguro usando .get para no romper si falta alguna columna)
+            tag = (row.get("tag") or row.get("tag_norm") or "").strip()
+            title = row.get("title", "").strip()
+            snippet = row.get("snippet", "").strip()
+            source = row.get("source", row.get("domain", "")).strip()
+            tier = row.get("tier", "").strip()
+            sentiment = row.get("sentiment_norm", row.get("sentiment", "NEUTRO")).strip()
+            link = row.get("link", "").strip()
+        
+            # Tag destacado (puedes cambiar el color aquí si querés)
+            tag_html = ""
+            if tag:
+                tag_html = (
+                    f"<div style='display:inline-block;padding:4px 10px;border-radius:10px;"
+                    f"background:#ff4081;color:#fff;font-weight:700;font-size:12px;margin-bottom:8px;"
+                    f"font-family:Arial,Helvetica,sans-serif;text-transform:uppercase'>{tag}</div>"
+                )
+        
+            # Card HTML (nuevo formato pedido)
             return (
-                "<div style='background:#fff; border:1px solid #ddd; border-radius:8px; "
-                "padding:15px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.05);'>"
-                f"<h3 style='margin:0; font-size:18px; color:#222; font-family:Arial,Helvetica,sans-serif'>{row['title']}</h3>"
-                f"<p style='margin:0; font-size:12px; color:#777; font-family:Arial,Helvetica,sans-serif'>"
-                f"<i>{row['date_utc']} - {row['domain']} - {sentiment_html}</i></p>"
-                f"<p style='margin:10px 0; font-size:14px; color:#333; line-height:1.4; font-family:Arial,Helvetica,sans-serif'>{row['snippet']}</p>"
-                f"<a href='{row['link']}' target='_blank' "
-                "style='display:inline-block; margin-top:5px; font-size:13px; color:#1a73e8; "
-                "text-decoration:none; font-family:Arial,Helvetica,sans-serif'>🔗 Leer más</a>"
+                "<div style='background:#fff;border:1px solid #e6e6e6;border-radius:8px;"
+                "padding:14px;margin-bottom:16px;box-shadow:0 2px 3px rgba(0,0,0,0.04);'>"
+                f"{tag_html}"
+                # Title: más grande y en negrita
+                f"<h3 style='margin:6px 0 8px;font-size:20px;font-weight:800;color:#111;"
+                "font-family:Arial,Helvetica,sans-serif;line-height:1.1'>{title}</h3>"
+                # Snippet: tamaño menor y letra normal
+                f"<p style='margin:0 0 12px;font-size:13px;color:#444;font-family:Arial,Helvetica,sans-serif;"
+                "line-height:1.4'>{snippet}</p>"
+                # Línea divisoria
+                "<hr style='border:none;border-top:1px solid #f0f0f0;margin:10px 0 12px;'>"
+                # Meta (Media / Tier / Sentiment / Article)
+                "<p style='margin:0;font-size:13px;color:#555;font-family:Arial,Helvetica,sans-serif;line-height:1.4'>"
+                f"<strong>Media:</strong> {source} &nbsp;|&nbsp; "
+                f"<strong>Tier:</strong> {tier or '—'} &nbsp;|&nbsp; "
+                f"<strong>Sentiment:</strong> {sentiment or 'NEUTRO'} &nbsp;|&nbsp; "
+                f"<strong>Article:</strong> "
+                f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none'>link</a>"
+                "</p>"
                 "</div>"
             )
 
