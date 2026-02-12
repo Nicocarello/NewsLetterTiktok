@@ -230,7 +230,7 @@ def format_email_html(df, window_label):
                 f"<div style='border-top:1px solid #f1f3f4;padding-top:10px;font-size:12px;color:#5f6368;font-family:Arial,sans-serif;'>"
                 f"<span>🏛 {source or '—'}</span> &nbsp;|&nbsp; "
                 f"<span>Tier: {tier or '—'}</span> &nbsp;|&nbsp; "
-                f"{sentiment_html} &nbsp;|&nbsp; "
+                f"{sentiment_badge} &nbsp;|&nbsp; "
                 f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none;font-weight:bold'>Leer más →</a>"
                 f"</div>"
                 f"</div>"
