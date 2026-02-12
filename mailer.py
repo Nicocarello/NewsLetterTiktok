@@ -213,7 +213,7 @@ def format_email_html(df, window_label):
                 
                 # 3. Sentiment (Badge al lado del label)
                 f"<div style='margin-bottom:4px;'>"
-                f"<strong style='color:#000000'>Sentiment:</strong> {sentiment_badge}"
+                f"<strong style='color:#000000'>Sentiment:</strong> {sentiment_html}"
                 f"</div>"
                 
                 # 4. Article (Link)
