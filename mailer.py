@@ -112,7 +112,7 @@ def format_email_html(df, window_label):
         "<div style='margin-bottom:20px; text-align:center;'>"
         # "<img src='https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/cabezal.png' "
         "<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' "
-        "alt='Header' style='max-width:60%; height:auto;'>"
+        "alt='Header' style='max-width:70%; height:auto;'>"
         "</div>"
     ]
 
@@ -232,11 +232,11 @@ def format_email_html(df, window_label):
             block = known[known["tag_norm"] == t]
             if block.empty:
                 continue
-            body.append(
-                f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
-                f"color:#222; text-transform:uppercase; letter-spacing:.5px; "
-                f"font-size:16px; font-weight:bold;'>{t}</h4>"
-            )
+            # body.append(
+            #     f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
+            #     f"color:#222; text-transform:uppercase; letter-spacing:.5px; "
+            #     f"font-size:16px; font-weight:bold;'>{t}</h4>"
+            # )
             for _, row in sort_news(block).iterrows():
                 body.append(render_card(row))
 
@@ -244,11 +244,11 @@ def format_email_html(df, window_label):
         if not unknown.empty:
             for t in sorted(unknown["tag_norm"].unique()):
                 block = unknown[unknown["tag_norm"] == t]
-                body.append(
-                    f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
-                    f"color:#222; text-transform:uppercase; letter-spacing:.5px; "
-                    f"font-size:16px; font-weight:bold;'>{t}</h4>"
-                )
+                # body.append(
+                #     f"<h4 style='margin:10px 0 8px; font-family:Arial,Helvetica,sans-serif; "
+                #     f"color:#222; text-transform:uppercase; letter-spacing:.5px; "
+                #     f"font-size:16px; font-weight:bold;'>{t}</h4>"
+                # )
                 for _, row in sort_news(block).iterrows():
                     body.append(render_card(row))
 
