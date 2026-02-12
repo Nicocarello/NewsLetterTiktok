@@ -132,108 +132,88 @@ def format_email_html(df, window_label):
 
         # Render de una noticia
         def render_card(row):
-            import pandas as _pd
-            import re
+            """Genera el HTML de una tarjeta con los datos apilados verticalmente."""
+            
+            # --- 1. Extracción de datos (Igual que antes) ---
+            title = ""
+            snippet = ""
+            
+            for col in ["title", "Title", "titulo", "headline", "D"]:
+                cand = row.get(col)
+                cleaned = clean_value(cand)
+                if cleaned:
+                    title = cleaned
+                    break
+            if not title and len(row) > 3:
+                title = clean_value(row.iloc[3])
         
-            def s(v):
-                if v is None:
-                    return ""
-                try:
-                    if _pd.isna(v):
-                        return ""
-                except Exception:
-                    pass
-                return str(v).strip()
+            for col in ["snippet", "Snippet", "resumen", "body", "H"]:
+                cand = row.get(col)
+                cleaned = clean_value(cand)
+                if cleaned:
+                    snippet = cleaned
+                    break
+            if not snippet and len(row) > 7:
+                snippet = clean_value(row.iloc[7])
         
-            placeholder_re = re.compile(r'^\s*\{(.+?)\}\s*$')
+            source = clean_value(row.get("source") or row.get("domain") or row.get("G"))
+            tier = clean_value(row.get("tier") or row.get("L"))
+            link = clean_value(row.get("link") or row.get("url") or row.get("E"))
+            
+            raw_sentiment = clean_value(row.get("sentiment_norm") or row.get("sentiment") or "NEUTRO")
+            sentiment_html = sentiment_badge(raw_sentiment)
         
-            # obtenciones previas intentando nombres comunes
-            def get_first_non_placeholder(keys):
-                for k in keys:
-                    v = row.get(k)
-                    if v is None:
-                        continue
-                    sv = s(v)
-                    if sv and not placeholder_re.match(sv):
-                        return sv
-                return ""
-        
-            # 1) intentos por nombres "normales"
-            title = get_first_non_placeholder(["title", "Title", "titulo", "Título", "headline", "Headline", "d", "D"])
-            snippet = get_first_non_placeholder(["snippet", "Snippet", "resumen", "Resumen", "h", "H", "body", "texto"])
-        
-            # 2) si son placeholders o vacíos: probar la columna literal "D" y "H"
-            if not title or placeholder_re.match(title):
-                try:
-                    cand = row.get("D", None)
-                    cand_s = s(cand)
-                    if cand_s and not placeholder_re.match(cand_s):
-                        title = cand_s
-                except Exception:
-                    pass
-        
-            if not snippet or placeholder_re.match(snippet):
-                try:
-                    cand = row.get("H", None)
-                    cand_s = s(cand)
-                    if cand_s and not placeholder_re.match(cand_s):
-                        snippet = cand_s
-                except Exception:
-                    pass
-        
-            # 3) fallback posicional seguro (D = index 3, H = index 7) si sigue sin valor
-            if (not title or placeholder_re.match(title)):
-                try:
-                    cand = row.iloc[3]  # columna D (0-based index)
-                    cand_s = s(cand)
-                    if cand_s and not placeholder_re.match(cand_s):
-                        title = cand_s
-                except Exception:
-                    # no hacer nada si no existe la posición
-                    pass
-        
-            if (not snippet or placeholder_re.match(snippet)):
-                try:
-                    cand = row.iloc[7]  # columna H (0-based index)
-                    cand_s = s(cand)
-                    if cand_s and not placeholder_re.match(cand_s):
-                        snippet = cand_s
-                except Exception:
-                    pass
-        
-            # resto de campos (sin cambios)
-            tag = get_first_non_placeholder(["tag", "Tag", "categoria", "category", "i", "I"])
-            source = get_first_non_placeholder(["source", "domain", "Source", "Domain", "g", "G"])
-            tier = get_first_non_placeholder(["tier", "Tier", "nivel", "L", "l"])
-            sentiment = get_first_non_placeholder(["sentiment_norm", "sentiment", "Sentiment", "J", "j"]) or "NEUTRO"
-            link = get_first_non_placeholder(["link", "Link", "url", "URL", "E", "e"])
-        
-            # Tag destacado
+            tag = clean_value(row.get("tag"))
             tag_html = ""
             if tag:
                 tag_html = (
-                    f"<div style='display:inline-block;padding:4px 10px;border-radius:10px;"
-                    f"background:#ff4081;color:#fff;font-weight:700;font-size:12px;margin-bottom:8px;"
-                    f"font-family:Arial,Helvetica,sans-serif;text-transform:uppercase'>{tag}</div>"
+                    f"<div style='display:inline-block;padding:3px 8px;border-radius:4px;"
+                    f"background:#ff4081;color:#fff;font-weight:bold;font-size:10px;margin-bottom:8px;"
+                    f"font-family:Arial,sans-serif;text-transform:uppercase'>{tag}</div>"
                 )
         
-            # Card HTML (mantengo el formato que definiste)
+            # --- 2. HTML con layout vertical ---
+            # Usamos divs independientes para Media, Tier, Sentiment y Article
             return (
                 f"<div style='background:#fff;border:1px solid #e0e0e0;border-radius:8px;"
                 f"padding:15px;margin-bottom:15px;box-shadow:0 1px 2px rgba(0,0,0,0.05);'>"
                 f"{tag_html}"
+                
+                # Título
                 f"<h3 style='margin:5px 0 10px;font-size:18px;font-weight:700;color:#202124;"
                 f"font-family:Arial,sans-serif;line-height:1.3'>"
                 f"<a href='{link}' style='text-decoration:none;color:#1a0dab'>{title}</a></h3>"
-                f"<p style='margin:0 0 12px;font-size:14px;color:#3c4043;font-family:Arial,sans-serif;"
+                
+                # Resumen
+                f"<p style='margin:0 0 15px;font-size:14px;color:#3c4043;font-family:Arial,sans-serif;"
                 f"line-height:1.5'>{snippet}</p>"
-                f"<div style='border-top:1px solid #f1f3f4;padding-top:10px;font-size:12px;color:#5f6368;font-family:Arial,sans-serif;'>"
-                f"<span>🏛 {source or '—'}</span> &nbsp;|&nbsp; "
-                f"<span>Tier: {tier or '—'}</span> &nbsp;|&nbsp; "
-                f"{sentiment_badge} &nbsp;|&nbsp; "
-                f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none;font-weight:bold'>Leer más →</a>"
+                
+                # --- SECCIÓN METADATOS VERTICAL ---
+                f"<div style='border-top:1px solid #f1f3f4;padding-top:12px;font-size:13px;color:#444;font-family:Arial,sans-serif;line-height:1.6;'>"
+                
+                # 1. Media
+                f"<div style='margin-bottom:4px;'>"
+                f"<strong style='color:#5f6368'>Media:</strong> {source or '—'}"
                 f"</div>"
+                
+                # 2. Tier
+                f"<div style='margin-bottom:4px;'>"
+                f"<strong style='color:#5f6368'>Tier:</strong> {tier or '—'}"
                 f"</div>"
+                
+                # 3. Sentiment (Badge al lado del label)
+                f"<div style='margin-bottom:4px;'>"
+                f"<strong style='color:#5f6368'>Sentiment:</strong> {sentiment_badge}"
+                f"</div>"
+                
+                # 4. Article (Link)
+                f"<div>"
+                f"<strong style='color:#5f6368'>Article:</strong> "
+                f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none;font-weight:bold'>Leer nota →</a>"
+                f"</div>"
+                
+                f"</div>" # Cierre div metadatos
+                f"</div>" # Cierre card
             )
         
 
