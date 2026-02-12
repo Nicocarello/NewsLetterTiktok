@@ -41,25 +41,7 @@ if not APIFY_TOKEN:
 
 # Optional tunables via env
 COUNTRIES = [c.strip() for c in os.getenv("COUNTRIES", "ar,cl,pe").split(",") if c.strip()]
-QUERIES = [q.strip() for q in os.getenv(
-    "QUERIES",
-    (
-        # YouTube
-        "youtube",
-        # Google
-        "google",
-        # Instagram
-        "instagram",
-        # Facebook
-        "facebook",
-        # Snapchat
-        "snapchat",
-        # X / Twitter
-        "twitter",
-        # Twitch
-        "twitch"
-    )
-).split(",") if q.strip()]
+QUERIES = [q.strip() for q in (os.getenv("QUERIES") or "youtube,google,instagram,facebook,snapchat,twitter,twitch").split(",") if q.strip()]
 
 
 try:
