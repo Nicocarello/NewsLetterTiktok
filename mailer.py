@@ -120,7 +120,7 @@ def format_email_html(df, window_label):
         "<div style='width:70%;"
         "margin:0 auto 30px auto;"
         "background-color:#000000;"
-        "padding:25px 0;"
+        "padding:10px 0;"
         "text-align:center;'>"
         
         "<span style='font-family:Arial, Helvetica, sans-serif;"
