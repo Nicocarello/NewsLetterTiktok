@@ -128,7 +128,7 @@ def format_email_html(df, window_label):
         if img_url:
             body.append(
                 f"<div style='margin-top:30px; margin-bottom:15px;'>"
-                f"<img src='{img_url}' alt='{country}' style='max-height:40px;'>"
+                f"<img src='{img_url}' alt='{country}' style='max-height:28px;'>"
                 f"</div>"
             )
         else:
