@@ -74,11 +74,11 @@ def filter_by_window(df, now):
     return df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)], label
 
 # Diccionario de imágenes de país
-COUNTRY_IMAGES = {
-    "Argentina": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/ARG.png",
-    "Chile": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/CHILE.png",
-    "Peru": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/PERU.png"
-}
+# COUNTRY_IMAGES = {
+#     "Argentina": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/ARG.png",
+#     "Chile": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/CHILE.png",
+#     "Peru": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/PERU.png"
+# }
 
 def clean_value(val):
     """Limpia valores nulos o placeholders."""
@@ -123,18 +123,38 @@ def format_email_html(df, window_label):
         return dfpart.assign(_k=sort_key).sort_values("_k", ascending=False)
 
     # País
-    for country, group_country in df.groupby("country"):
-        img_url = COUNTRY_IMAGES.get(country, "")
-        if img_url:
+    # for country, group_country in df.groupby("country"):
+    #     img_url = COUNTRY_IMAGES.get(country, "")
+    #     if img_url:
+    #         body.append(
+    #             f"<div style='margin-top:30px; margin-bottom:15px;'>"
+    #             f"<img src='{img_url}' alt='{country}' style='max-height:28px;'>"
+    #             f"</div>"
+    #         )
+    #     else:
+    #         body.append(
+    #             f"<h3 style='margin-top:30px; color:#444; font-family:Arial,Helvetica,sans-serif'>{country}</h3>"
+    #         )
+    # País
+        COUNTRY_EMOJIS = {
+            "Argentina": "🇦🇷",
+            "Chile": "🇨🇱",
+            "Peru": "🇵🇪"
+        }
+        
+        for country, group_country in df.groupby("country"):
+            emoji = COUNTRY_EMOJIS.get(country, "")
+            
             body.append(
-                f"<div style='margin-top:30px; margin-bottom:15px;'>"
-                f"<img src='{img_url}' alt='{country}' style='max-height:28px;'>"
+                f"<div style='margin-top:30px; margin-bottom:15px;"
+                f"font-family:Helvetica,sans-serif;"
+                f"font-size:22px;"
+                f"font-weight:700;"
+                f"color:#fe2c55;'>"
+                f"{country} {emoji}"
                 f"</div>"
             )
-        else:
-            body.append(
-                f"<h3 style='margin-top:30px; color:#444; font-family:Arial,Helvetica,sans-serif'>{country}</h3>"
-            )
+
 
         known = group_country[group_country["tag_norm"].isin(orderTags)]
         unknown = group_country[~group_country["tag_norm"].isin(orderTags)]
@@ -190,12 +210,12 @@ def format_email_html(df, window_label):
                 f"{tag_html}"
                 
                 # Título
-                f"<h3 style='margin:5px 0 10px;font-size:36px;font-weight:700;color:#202124;"
+                f"<h3 style='margin:5px 0 10px;font-size:30px;font-weight:700;color:#202124;"
                 f"font-family:Helvetica,sans-serif;line-height:1.3'>"
                 f"<a href='{link}' style='text-decoration:none;color:#000000'>{title}</a></h3>"
                 
                 # Resumen
-                f"<p style='margin:0 0 15px;font-size:18px;color:#000000;font-family:Helvetica,sans-serif;"
+                f"<p style='margin:0 0 15px;font-size:14px;color:#000000;font-family:Helvetica,sans-serif;"
                 f"line-height:1.5'>{snippet}</p>"
                 
                 # --- SECCIÓN METADATOS VERTICAL ---
@@ -203,7 +223,7 @@ def format_email_html(df, window_label):
                 
                 # 1. Media
                 f"<div style='margin-bottom:4px;'>"
-                f"<strong style='color:#000000'>Media:</strong> "
+                f"<strong style='color:#000000'>Medio:</strong> "
                 f"<span style='color:#000000'>{source or '—'}</span>"
                 f"</div>"
                 
@@ -219,7 +239,7 @@ def format_email_html(df, window_label):
                 
                 # 4. Article (Link)
                 f"<div>"
-                f"<strong style='color:#000000'>Article:</strong> "
+                f"<strong style='color:#000000'>Artículo:</strong> "
                 f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none;font-weight:bold'>Leer nota →</a>"
                 f"</div>"
                 
@@ -257,8 +277,8 @@ def format_email_html(df, window_label):
 
 def send_email(subject, body):
     """Envía el correo usando SMTP"""
-    recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    #recipients = ["nicolas.carello@publicalatam.com"]
+    #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
+    recipients = ["nicolas.carello@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
