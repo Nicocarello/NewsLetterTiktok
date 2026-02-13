@@ -111,27 +111,30 @@ def format_email_html(df, window_label):
 
     body = [
         "<div style='margin-bottom:10px; text-align:center;'>"
+        # "<img src='https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/cabezal.png' "
         "<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' "
         "alt='Header' style='max-width:70%; height:auto;'>"
         "</div>",
     
-        # Banner negro
-        "<div style='background-color:#000000;"
+        # Banner negro con mismo ancho que la imagen (70%)
+        "<div style='width:70%;"
+        "margin:0 auto 30px auto;"
+        "background-color:#000000;"
         "padding:25px 0;"
-        "text-align:center;"
-        "margin-bottom:30px;'>"
-    
+        "text-align:center;'>"
+        
         "<span style='font-family:Arial, Helvetica, sans-serif;"
         "font-size:42px;"
         "font-weight:800;"
         "letter-spacing:-0.5px;'>"
-    
+        
         "<span style='color:#FFFFFF;'>TikTok</span>"
         "<span style='color:#00F2EA;'> / </span>"
         "<span style='color:#fe2c55;'>Institutional</span>"
-    
+        
         "</span>"
         "</div>"
+
     ]
 
 
