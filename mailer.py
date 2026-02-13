@@ -148,7 +148,7 @@ def format_email_html(df, window_label):
     COUNTRY_EMOJIS = {
         "Argentina": "🇦🇷",
         "Chile": "🇨🇱",
-        "Perú": "🇵🇪"
+        "Peru": "🇵🇪"
     }
     
     for country, group_country in df.groupby("country"):
