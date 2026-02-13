@@ -203,7 +203,8 @@ def format_email_html(df, window_label):
                 
                 # 1. Media
                 f"<div style='margin-bottom:4px;'>"
-                f"<strong style='color:#000000'>Media:</strong> {source or '—'}"
+                f"<strong style='color:#000000'>Media:</strong> "
+                f"<span style='color:#000000'>{source or '—'}</span>"
                 f"</div>"
                 
                 # 2. Tier
