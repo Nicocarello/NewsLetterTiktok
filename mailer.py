@@ -233,7 +233,7 @@ def format_email_html(df, window_label):
                 
                 # 4. Article (Link)
                 f"<div>"
-                f"<strong style='color:#000000'>Article:</strong> "
+                f"<strong style='color:#000000'>Artículo:</strong> "
                 f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none;font-weight:bold'>Leer nota →</a>"
                 f"</div>"
                 
