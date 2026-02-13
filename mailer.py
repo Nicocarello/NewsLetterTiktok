@@ -74,11 +74,12 @@ def filter_by_window(df, now):
     return df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)], label
 
 # Diccionario de imágenes de país
-COUNTRY_IMAGES = {
-    "Argentina": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/ARG.png",
-    "Chile": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/CHILE.png",
-    "Peru": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/PERU.png"
-}
+#COUNTRY_IMAGES = {
+#    "Argentina": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/ARG.png",
+#    "Chile": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/CHILE.png",
+#    "Peru": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/PERU.png"
+#}
+
 
 def clean_value(val):
     """Limpia valores nulos o placeholders."""
@@ -123,18 +124,25 @@ def format_email_html(df, window_label):
         return dfpart.assign(_k=sort_key).sort_values("_k", ascending=False)
 
     # País
+    COUNTRY_EMOJIS = {
+        "Argentina": "🇦🇷",
+        "Chile": "🇨🇱",
+        "Peru": "🇵🇪"
+    }
+    
     for country, group_country in df.groupby("country"):
-        img_url = COUNTRY_IMAGES.get(country, "")
-        if img_url:
-            body.append(
-                f"<div style='margin-top:30px; margin-bottom:15px;'>"
-                f"<img src='{img_url}' alt='{country}' style='max-height:28px;'>"
-                f"</div>"
-            )
-        else:
-            body.append(
-                f"<h3 style='margin-top:30px; color:#444; font-family:Arial,Helvetica,sans-serif'>{country}</h3>"
-            )
+        emoji = COUNTRY_EMOJIS.get(country, "")
+        
+        body.append(
+            f"<div style='margin-top:30px; margin-bottom:15px;"
+            f"font-family:Helvetica,sans-serif;"
+            f"font-size:22px;"
+            f"font-weight:700;"
+            f"color:#fe2c55;'>"
+            f"{country} {emoji}"
+            f"</div>"
+        )
+
 
         known = group_country[group_country["tag_norm"].isin(orderTags)]
         unknown = group_country[~group_country["tag_norm"].isin(orderTags)]
@@ -257,8 +265,8 @@ def format_email_html(df, window_label):
 
 def send_email(subject, body):
     """Envía el correo usando SMTP"""
-    recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    #recipients = ["nicolas.carello@publicalatam.com"]
+    #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
+    recipients = ["nicolas.carello@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
