@@ -51,7 +51,12 @@ except Exception:
     MAX_ITEMS = 500
 
 TIME_PERIOD = os.getenv("TIME_PERIOD", "last_day")
+# Mantengo la timezone previa (Buenos Aires) para compatibilidad con tu versión actual
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
+
+# Concurrency tunables (env)
+MAX_CONCURRENT_ACTORS = int(os.getenv("MAX_CONCURRENT_ACTORS", "4"))
+MAX_CONCURRENT_DATASET_FETCH = int(os.getenv("MAX_CONCURRENT_DATASET_FETCH", "6"))
 
 # --- Google Sheets client ---
 try:
@@ -107,8 +112,8 @@ def format_week_range(date_str):
     except Exception:
         return ''
 
-# --- Scrape loop (colección de dataframes) ---
-all_dfs = []
+# --- Parallel actor execution (build task list: query x country) ---
+tasks = []
 for query in QUERIES:
     for country in COUNTRIES:
         run_input = {
@@ -119,38 +124,70 @@ for query in QUERIES:
             "query": query,
             "time_period": TIME_PERIOD
         }
+        tasks.append({"query": query, "country": country, "run_input": run_input})
+
+logging.info("Lanzando %d ejecuciones de actor (concurrency=%d)...", len(tasks), MAX_CONCURRENT_ACTORS)
+
+def run_actor_task(task):
+    query = task["query"]
+    country = task["country"]
+    run_input = task["run_input"]
+    try:
         logging.info("Ejecutando actor %s para %s con query '%s'...", ACTOR_ID, country, query)
-        try:
-            run = retry(lambda: apify_client.actor(ACTOR_ID).call(run_input=run_input), max_attempts=4)
-        except Exception as e:
-            logging.error("Error al ejecutar actor para %s con query '%s': %s", country, query, e)
-            continue
-
+        run = retry(lambda: apify_client.actor(ACTOR_ID).call(run_input=run_input), max_attempts=4)
         dataset_id = run.get("defaultDatasetId")
-        if not dataset_id:
-            logging.warning("No dataset generado para %s - '%s'.", country, query)
-            continue
+        return {"query": query, "country": country, "run": run, "dataset_id": dataset_id, "error": None}
+    except Exception as e:
+        logging.exception("Error al ejecutar actor para %s con query '%s': %s", country, query, e)
+        return {"query": query, "country": country, "run": None, "dataset_id": None, "error": str(e)}
 
-        try:
-            items = retry(lambda: apify_client.dataset(dataset_id).list_items().items, max_attempts=4)
-        except Exception as e:
-            logging.exception("Error listando items del dataset %s: %s", dataset_id, e)
+actor_results = []
+with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACTORS) as ex:
+    futures = {ex.submit(run_actor_task, t): t for t in tasks}
+    for fut in as_completed(futures):
+        res = fut.result()
+        if res["error"]:
+            logging.warning("Run falló para %s - %s: %s", res["country"], res["query"], res["error"])
             continue
+        if not res["dataset_id"]:
+            logging.warning("No dataset generado para %s - %s (run: %s)", res["country"], res["query"], str(res["run"])[:200])
+            continue
+        actor_results.append(res)
 
+logging.info("Ejecuciones completadas: %d exitosas / %d totales", len(actor_results), len(tasks))
+
+# --- Descarga datasets en paralelo ---
+def fetch_dataset_items(entry):
+    dataset_id = entry["dataset_id"]
+    country = entry["country"]
+    query = entry["query"]
+    try:
+        items = retry(lambda: apify_client.dataset(dataset_id).list_items().items, max_attempts=4)
         if not items:
-            logging.info("No hay resultados para %s - '%s'", country, query)
-            continue
-
+            logging.info("No items para dataset %s (%s - %s)", dataset_id, country, query)
+            return None
         df = pd.DataFrame(items)
         df["country"] = country
         df["query"] = query
         df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
-        all_dfs.append(df)
+        return df
+    except Exception as e:
+        logging.exception("Error listando items del dataset %s: %s", dataset_id, e)
+        return None
+
+all_dfs = []
+with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_DATASET_FETCH) as ex:
+    futures = {ex.submit(fetch_dataset_items, r): r for r in actor_results}
+    for fut in as_completed(futures):
+        df = fut.result()
+        if df is not None and not df.empty:
+            all_dfs.append(df)
 
 if not all_dfs:
     logging.error("No se obtuvieron resultados de ningún país. Saliendo sin actualizar hoja.")
     sys.exit(0)
 
+# --- Build final dataframe and normalize columns ---
 final_df = pd.concat(all_dfs, ignore_index=True)
 
 if 'link' in final_df.columns:
@@ -160,7 +197,7 @@ else:
 
 final_df = safe_convert_date_col(final_df, 'date_utc')
 
-# Añadir columnas esperadas
+# Ensure additional columns exist
 for col in ('sentiment', 'semana', 'tag', 'article_body'):
     if col not in final_df.columns:
         final_df[col] = ''
@@ -260,7 +297,7 @@ save_cache(CACHE_PATH, article_cache)
 final_df['link'] = final_df['link'].astype(str)
 final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_key(u), '')).fillna('')
 
-# --- Filter rows que mencionan tiktok en title/snippet/article_body ---
+# --- Filtering: keep rows that mention the pattern in title OR snippet OR article_body ---
 mask = (
     final_df['title'].str.contains(TIKTOK_PATTERN, na=False) |
     final_df['snippet'].str.contains(TIKTOK_PATTERN, na=False) |
@@ -271,12 +308,12 @@ final_df = final_df[mask].copy()
 after_tot = len(final_df)
 logging.info("After body verification filter: %d -> %d rows (removed %d)", before_tot, after_tot, before_tot - after_tot)
 
-# Ensure column order + drop duplicates
+# Ensure column order and presence
 header = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
 final_df = final_df.drop_duplicates(subset='link')
 
-# --- Read existing sheet, combine, sanitize and write back ---
+# --- Read existing sheet and combine ---
 SHEET_RANGE = "2026!A:K"
 try:
     result = sheet_service.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
@@ -293,7 +330,7 @@ if values:
     try:
         existing_df = pd.DataFrame(values[1:], columns=values[0]).reindex(columns=header, fill_value='')
     except Exception as e:
-        logging.exception("Error parsing existing sheet values: %s", e)
+        logging.exception("Error parsing existing sheet values into DataFrame: %s", e)
         existing_df = pd.DataFrame(columns=header)
 else:
     existing_df = pd.DataFrame(columns=header)
@@ -303,7 +340,9 @@ if 'link' in combined_df.columns:
     combined_df.drop_duplicates(subset=["link"], inplace=True)
 combined_df = combined_df.reset_index(drop=True)
 
-# Sanitization helpers
+# --- SANITIZE data before writing to Sheets ---
+combined_df = combined_df.replace([np.nan, pd.NaT, None], '').replace([np.inf, -np.inf], '')
+
 def sanitize_cell(cell):
     if isinstance(cell, (np.integer,)):
         return int(cell)
@@ -317,7 +356,8 @@ def sanitize_cell(cell):
     try:
         import pandas as _pd
         if isinstance(cell, _pd.Timestamp):
-            if pd.isna(cell): return ''
+            if pd.isna(cell):
+                return ''
             return cell.isoformat()
     except Exception:
         pass
@@ -326,9 +366,11 @@ def sanitize_cell(cell):
         return ''
     return s
 
-combined_df = combined_df.replace([np.nan, pd.NaT, None], '').replace([np.inf, -np.inf], '')
+values_rows = []
+for row in combined_df[header].values.tolist():
+    sanitized_row = [sanitize_cell(cell) for cell in row]
+    values_rows.append([str(cell) for cell in sanitized_row])
 
-values_rows = [[str(sanitize_cell(cell)) for cell in row] for row in combined_df[header].values.tolist()]
 body_values = [header] + values_rows
 
 def is_json_serializable(obj):
@@ -338,12 +380,17 @@ def is_json_serializable(obj):
     except Exception:
         return False
 
-bad_cells = [(r, c, type(cell).__name__) for r, row in enumerate(body_values) for c, cell in enumerate(row) if not is_json_serializable(cell)]
+bad_cells = []
+for r_idx, row in enumerate(body_values):
+    for c_idx, cell in enumerate(row):
+        if not is_json_serializable(cell):
+            bad_cells.append((r_idx, c_idx, type(cell).__name__, repr(cell)))
 if bad_cells:
-    logging.warning("Found unserializable cells (count %d). Showing up to 20 entries:", len(bad_cells))
+    logging.warning("Found unserializable cells (row_index, col_index, type, repr). Showing up to 20 entries:")
     for entry in bad_cells[:20]:
         logging.warning(entry)
 
+# --- Write to sheet with diagnostics on HttpError ---
 try:
     logging.info("Clearing target range %s ...", SHEET_RANGE)
     sheet_service.values().clear(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
@@ -357,7 +404,11 @@ try:
     logging.info("✅ Hoja actualizada sin duplicados. Filas escritas: %d", len(body_values)-1)
 except HttpError as e:
     logging.exception("HttpError escribiendo en Sheets: %s", e)
-    sample_preview = {"first_rows": body_values[:5], "rows_count": len(body_values), "bad_cells_count": len(bad_cells)}
+    sample_preview = {
+        "first_rows": body_values[:5],
+        "rows_count": len(body_values),
+        "bad_cells_count": len(bad_cells),
+    }
     logging.error("Payload preview (first 5 rows): %s", json.dumps(sample_preview, ensure_ascii=False, indent=2))
     raise
 except Exception as e:
