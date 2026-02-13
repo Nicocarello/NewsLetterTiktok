@@ -125,9 +125,9 @@ def format_email_html(df, window_label):
 
     # País
     COUNTRY_EMOJIS = {
-        "Argentina": "🇦🇷",
-        "Chile": "🇨🇱",
-        "Peru": "🇵🇪"
+        "ARGENTINA": "🇦🇷",
+        "CHILE": "🇨🇱",
+        "PERU": "🇵🇪"
     }
     
     for country, group_country in df.groupby("country"):
@@ -198,12 +198,12 @@ def format_email_html(df, window_label):
                 f"{tag_html}"
                 
                 # Título
-                f"<h3 style='margin:5px 0 10px;font-size:36px;font-weight:700;color:#202124;"
+                f"<h3 style='margin:5px 0 10px;font-size:30px;font-weight:700;color:#202124;"
                 f"font-family:Helvetica,sans-serif;line-height:1.3'>"
                 f"<a href='{link}' style='text-decoration:none;color:#000000'>{title}</a></h3>"
                 
                 # Resumen
-                f"<p style='margin:0 0 15px;font-size:18px;color:#000000;font-family:Helvetica,sans-serif;"
+                f"<p style='margin:0 0 15px;font-size:15px;color:#000000;font-family:Helvetica,sans-serif;"
                 f"line-height:1.5'>{snippet}</p>"
                 
                 # --- SECCIÓN METADATOS VERTICAL ---
