@@ -137,24 +137,23 @@ def format_email_html(df, window_label):
     #         )
     # País
         COUNTRY_EMOJIS = {
-            "Argentina": "🇦🇷",
-            "Chile": "🇨🇱",
-            "Peru": "🇵🇪"
-        }
-        
-        for country, group_country in df.groupby("country"):
-            emoji = COUNTRY_EMOJIS.get(country, "")
+                "Argentina": "🇦🇷",
+                "Chile": "🇨🇱",
+                "Peru": "🇵🇪"
+            }
             
-            body.append(
-                f"<div style='margin-top:30px; margin-bottom:15px;"
-                f"font-family:Helvetica,sans-serif;"
-                f"font-size:22px;"
-                f"font-weight:700;"
-                f"color:#fe2c55;'>"
-                f"{country} {emoji}"
-                f"</div>"
-            )
-
+            for country, group_country in df.groupby("country"):
+                emoji = COUNTRY_EMOJIS.get(country, "")
+                
+                body.append(
+                    f"<div style='margin-top:30px; margin-bottom:15px;"
+                    f"font-family:Helvetica,sans-serif;"
+                    f"font-size:22px;"
+                    f"font-weight:700;"
+                    f"color:#fe2c55;'>"
+                    f"{country} {emoji}"
+                    f"</div>"
+                )
 
         known = group_country[group_country["tag_norm"].isin(orderTags)]
         unknown = group_country[~group_country["tag_norm"].isin(orderTags)]
