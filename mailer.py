@@ -208,7 +208,7 @@ def format_email_html(df, window_label):
                 
                 # 2. Tier
                 f"<div style='margin-bottom:4px;'>"
-                f"<strong style='color:#000000'></strong> {tier or '—'}"
+                f"<strong style='color:#000000'>{tier or '—'}</strong>"
                 f"</div>"
                 
                 # 3. Sentiment (Badge al lado del label)
