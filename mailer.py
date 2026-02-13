@@ -220,7 +220,7 @@ def format_email_html(df, window_label):
                 
                 # Título
                 f"<h3 style='margin:5px 0 12px;"
-                f"font-size:28px;"
+                f"font-size:20px;"
                 f"font-weight:800;"
                 f"letter-spacing:-0.4px;"
                 f"color:#000000;"
@@ -230,11 +230,11 @@ def format_email_html(df, window_label):
                 f"{title}</a></h3>"
                 
                 # Resumen
-                f"<p style='margin:0 0 15px;font-size:15px;color:#000000;font-family:Helvetica,sans-serif;"
+                f"<p style='margin:0 0 15px;font-size:12px;color:#000000;font-family:Helvetica,sans-serif;"
                 f"line-height:1.5'>{snippet}</p>"
                 
                 # --- SECCIÓN METADATOS VERTICAL ---
-                f"<div style='border-top:1px solid #f1f3f4;padding-top:12px;font-size:14px;color:#444;font-family:Helvetica,sans-serif;line-height:1.6;'>"
+                f"<div style='border-top:1px solid #f1f3f4;padding-top:12px;font-size:12px;color:#444;font-family:Helvetica,sans-serif;line-height:1.6;'>"
                 
                 # 1. Media
                 f"<div style='margin-bottom:4px;'>"
