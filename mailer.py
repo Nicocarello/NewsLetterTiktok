@@ -115,15 +115,21 @@ def format_email_html(df, window_label):
         "alt='Header' style='max-width:70%; height:auto;'>"
         "</div>",
     
-        # Nuevo banner debajo de la imagen
-        "<div style='text-align:center; margin-bottom:30px;'>"
+        # Banner negro
+        "<div style='background-color:#000000;"
+        "padding:25px 0;"
+        "text-align:center;"
+        "margin-bottom:30px;'>"
+    
         "<span style='font-family:Arial, Helvetica, sans-serif;"
         "font-size:42px;"
         "font-weight:800;"
-        "color:#000000;'>"
-        "<span style='color:#000000;'>TikTok</span>"
+        "letter-spacing:-0.5px;'>"
+    
+        "<span style='color:#FFFFFF;'>TikTok</span>"
         "<span style='color:#00F2EA;'> / </span>"
         "<span style='color:#fe2c55;'>Institutional</span>"
+    
         "</span>"
         "</div>"
     ]
