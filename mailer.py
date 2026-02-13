@@ -110,12 +110,24 @@ def format_email_html(df, window_label):
     )
 
     body = [
-        "<div style='margin-bottom:20px; text-align:center;'>"
-        # "<img src='https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/cabezal.png' "
+        "<div style='margin-bottom:10px; text-align:center;'>"
         "<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' "
         "alt='Header' style='max-width:70%; height:auto;'>"
+        "</div>",
+    
+        # Nuevo banner debajo de la imagen
+        "<div style='text-align:center; margin-bottom:30px;'>"
+        "<span style='font-family:Arial, Helvetica, sans-serif;"
+        "font-size:42px;"
+        "font-weight:800;"
+        "color:#000000;'>"
+        "<span style='color:#000000;'>TikTok</span>"
+        "<span style='color:#00F2EA;'> / </span>"
+        "<span style='color:#fe2c55;'>Institutional</span>"
+        "</span>"
         "</div>"
     ]
+
 
     def sort_news(dfpart):
         sort_key = pd.to_datetime(dfpart.get("date_utc", pd.NaT), errors="coerce", utc=True)
