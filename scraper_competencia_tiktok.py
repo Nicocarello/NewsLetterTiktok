@@ -7,6 +7,7 @@ Versión revisada y con defensas adicionales del scraper Google News -> Google S
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.errors import HttpError
+from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
 import os
@@ -276,11 +277,66 @@ INSTRUCCIONES (leer atentamente)
         return "NEUTRO"
 
 # Crear columna con sentimiento
-combined_df["sentiment"] = combined_df["link"].apply(analizar_noticia)
+combined_df["sentiment"] = combined_df["link"].apply(clasificar_sentiment_noticia)
 
 # clasificar tag
 
+def clasificar_tag_noticia(url):
+    try:
+        # Descargar la página
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, "html.parser")
 
+        # Extraer solo el texto visible
+        paragraphs = [p.get_text() for p in soup.find_all("p")]
+        texto = " ".join(paragraphs)  
+
+        # Prompt claro y forzado a solo una palabra
+        prompt = f"""
+        ROL
+Actúa como un Analista de Datos Senior especializado en PR y Reputación Corporativa de empresas de redes sociales.
+Tu única misión es clasificar la noticia en UNA sola categoría estratégica.
+
+OBJETIVO
+Determinar cuál es el eje principal de la noticia en relación con TikTok como empresa.
+
+CATEGORÍAS DISPONIBLES (elige SOLO UNA)
+- Consumer & Brand
+- Music
+- B2B
+- SMB
+- Creator
+- Product
+- TnS
+- Corporate Reputation
+
+REGLA DE PRIORIDAD (OBLIGATORIA)
+Si la noticia impacta la imagen institucional, legal o regulatoria de la empresa,
+la categoría SIEMPRE es: Corporate Reputation.
+
+INSTRUCCIONES CRÍTICAS (LEER ATENTAMENTE)
+1) ANALIZA la noticia provista abajo.
+2) RESPONDE EXACTAMENTE con UNA de las siguientes cadenas (sin comillas, sin punto final, sin texto extra, sin explicación): 
+   {allowed_line}
+3) RESPONDE SOLO con la cadena EXACTA: por ejemplo: Product  (sin comillas)
+4) Si por alguna razón NO PUEDES CLASIFICAR (texto ausente o incompleto), RESPONDE EXACTAMENTE: Corporate Reputation
+5) NO agregues ninguna otra palabra, puntuación ni carácter.
+6) Respuestas aceptadas: [Consumer & Brand, Music, B2B, SMB, Creator, Product, TnS, Corporate Reputation]
+
+NOTICIA:
+        {texto}
+        """
+
+        # Usar el modelo que ya inicializaste afuera
+        response = model.generate_content(prompt)
+        resultado = response.text.strip().upper()
+
+    except Exception as e:
+        print(f"Error procesando {url}: {e}")
+        return "Corporate Reputation"
+
+# Crear columna con sentimiento
+combined_df["tag"] = df["link"].apply(clasificar_tag_noticia)
 
 
 def sanitize_cell(cell):
