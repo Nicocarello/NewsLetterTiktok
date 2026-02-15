@@ -185,7 +185,7 @@ except Exception:
     final_df['scraped_at'] = final_df['scraped_at'].astype(str).fillna('')
 
 # Ensure column order and presence
-header = ['date_utc','country','title','link','domain','snippet','scraped_at']
+header = ['date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
 
 #keep rows that contain youtube, facebook, instagram, snapchat, twitter, twitch, google in the title or snippet (case-insensitive)
@@ -194,7 +194,7 @@ pattern = '|'.join(keywords)
 final_df = final_df[final_df['title'].str.contains(pattern, case=False, na=False) | final_df['snippet'].str.contains(pattern, case=False, na=False)]
 
 # --- Read existing sheet and combine ---
-SHEET_RANGE = "Competencia!A:G"  # cambia si corresponde
+SHEET_RANGE = "Competencia!A:J"  # cambia si corresponde
 try:
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
     values = result.get("values", [])
