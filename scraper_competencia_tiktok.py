@@ -7,6 +7,7 @@ Versión revisada y con defensas adicionales del scraper Google News -> Google S
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.errors import HttpError
+import google.generativeai as genai
 from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
