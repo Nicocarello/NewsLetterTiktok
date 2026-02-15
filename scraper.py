@@ -597,6 +597,172 @@ try:
 except Exception as e:
     logging.warning("No se pudo guardar category cache: %s", e)
 
+# ---------------------------
+# SENTIMENT CLASSIFICATION (POSITIVO / NEGATIVO / NEUTRO) - usando Gemini
+# ---------------------------
+
+# Sentiment cache (opcional, reduce costos)
+SENTIMENT_CACHE_PATH = os.getenv("SENTIMENT_CACHE_PATH", "sentiment_cache.json")
+try:
+    if os.path.exists(SENTIMENT_CACHE_PATH):
+        with open(SENTIMENT_CACHE_PATH, "r", encoding="utf-8") as fh:
+            sentiment_cache = json.load(fh)
+    else:
+        sentiment_cache = {}
+except Exception:
+    sentiment_cache = {}
+
+VALID_SENTIMENTS = {"POSITIVO", "NEGATIVO", "NEUTRO"}
+FALLBACK_SENTIMENT = "NEUTRO"
+
+def build_sentiment_prompt(texto):
+    """
+    Prompt claro y muy restrictivo que obliga a devolver SOLO una palabra:
+    POSITIVO, NEGATIVO o NEUTRO — respecto a la reputación/imagen de TikTok como empresa.
+    """
+    max_chars = 8000  # reducir para bajar tokens (ajusta si necesitas)
+    t = (texto or "").strip()
+    if len(t) > max_chars:
+        t = t[:max_chars]
+
+    prompt = f"""
+ROL
+Actúa como Analista Senior de PR/Reputación. Tu única tarea es determinar si la noticia
+es POSITIVA, NEGATIVA o NEUTRA respecto a la reputación de TikTok como empresa/plataforma.
+
+INSTRUCCIONES (leer atentamente)
+- Analiza SOLO el texto provisto.
+- Responde únicamente con UNA de las tres palabras EXACTAS (en mayúsculas): POSITIVO, NEGATIVO o NEUTRO.
+- No añadas puntuación, explicaciones ni ningún otro texto.
+- Si no puedes clasificar por falta de información, responde EXACTAMENTE: NEUTRO
+- Respuestas aceptadas: [POSITIVO, NEGATIVO, NEUTRO]
+
+NOTICIA:
+{t}
+"""
+    return prompt
+
+def _call_model_sentiment_with_retry(prompt, max_attempts=3):
+    return retry(lambda: model.generate_content(prompt, temperature=0, max_output_tokens=12), max_attempts=max_attempts)
+
+def normalize_sentiment_from_model_output(raw_text):
+    """
+    Normaliza la salida del modelo a POSITIVO|NEGATIVO|NEUTRO.
+    Si no se puede mapear se devuelve FALLBACK_SENTIMENT.
+    """
+    if not raw_text:
+        return FALLBACK_SENTIMENT
+    s = raw_text.strip().upper()
+    # quitar puntos/comillas
+    s_clean = re.sub(r"[\"'\.\,\s]+", " ", s).strip()
+    # Buscar tokens directos
+    for token in re.split(r"[\s,;:()\[\]\"']+", s_clean):
+        if not token:
+            continue
+        if token in VALID_SENTIMENTS:
+            return token
+    # si el raw_text contiene la palabra clave completa
+    for v in VALID_SENTIMENTS:
+        if v in s:
+            return v
+    # Si viene una petición o aclaración -> fallback
+    low = raw_text.lower()
+    if "por favor" in low or "propor" in low or raw_text.startswith("(") or raw_text.startswith("["):
+        return FALLBACK_SENTIMENT
+    logging.warning("Salida de modelo no mapeable a sentiment: %s", raw_text)
+    return FALLBACK_SENTIMENT
+
+def categorize_sentiment_with_model(texto):
+    """
+    Construye prompt y llama al LLM con retry; devuelve POSITIVO/NEGATIVO/NEUTRO.
+    """
+    try:
+        if model is None:
+            logging.debug("Model not initialized — returning fallback sentiment")
+            return FALLBACK_SENTIMENT
+
+        if not texto or not texto.strip():
+            return FALLBACK_SENTIMENT
+
+        prompt = build_sentiment_prompt(texto)
+        try:
+            resp = _call_model_sentiment_with_retry(prompt, max_attempts=3)
+        except Exception as e:
+            logging.warning("Sentiment model call failed after retries: %s", e)
+            return FALLBACK_SENTIMENT
+
+        raw = ""
+        try:
+            raw = getattr(resp, "text", None) or ""
+        except Exception:
+            raw = ""
+
+        if not raw:
+            try:
+                cand = getattr(resp, "candidates", None)
+                if cand and len(cand) > 0:
+                    raw = getattr(cand[0], "content", "") or str(cand[0])
+            except Exception:
+                raw = str(resp)
+
+        return normalize_sentiment_from_model_output(raw)
+    except Exception as e:
+        logging.warning("Error en categorización de sentiment: %s", e)
+        return FALLBACK_SENTIMENT
+
+def categorize_sentiment_row(row):
+    """
+    row: dict con 'link' y 'article_body'.
+    Usa cache sentiment_cache para evitar llamadas redundantes.
+    """
+    url = (row.get("link") or "").strip()
+    k = url_key(url)
+    if k and k in sentiment_cache:
+        return sentiment_cache[k]
+
+    body = (row.get("article_body") or "").strip()
+    # si no hay body, no hacemos fetch extra aquí (ya lo hiciste para tag).
+    # Si prefieres intentar fetch, reuse fetch_html_with_retries/extract_body_from_html como en tag.
+    sentiment = categorize_sentiment_with_model(body)
+
+    if k:
+        try:
+            sentiment_cache[k] = sentiment
+        except Exception:
+            pass
+    return sentiment
+
+# Ejecutar clasificación de sentiment en paralelo (reusa MAX_FETCH_WORKERS)
+rows_for_sentiment = final_df.reset_index()[["index","link","article_body"]].to_dict(orient="records")
+logging.info("Starting sentiment classification for %d rows (workers=%d)...", len(rows_for_sentiment), MAX_FETCH_WORKERS)
+
+sent_map = {}
+with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
+    futures = {ex.submit(categorize_sentiment_row, r): r for r in rows_for_sentiment}
+    for fut in as_completed(futures):
+        r = futures[fut]
+        try:
+            s_val = fut.result()
+        except Exception as e:
+            logging.warning("Error classifying sentiment row (link=%s): %s", r.get("link"), e)
+            s_val = FALLBACK_SENTIMENT
+        sent_map[r["index"]] = s_val
+
+# Asignar a columna 'sentiment'
+final_df = final_df.reset_index()
+final_df["sentiment"] = final_df["index"].map(lambda i: sent_map.get(i, FALLBACK_SENTIMENT))
+final_df = final_df.drop(columns=["index"]).reset_index(drop=True)
+
+logging.info("Sentiment classification completed. Distribution: %s", final_df["sentiment"].value_counts().to_dict())
+
+# Persistir cache de sentiment
+try:
+    with open(SENTIMENT_CACHE_PATH, "w", encoding="utf-8") as fh:
+        json.dump(sentiment_cache, fh, ensure_ascii=False, indent=2)
+except Exception as e:
+    logging.warning("No se pudo guardar sentiment cache: %s", e)
+
+
 # Ensure column order and presence (header keeps 'tag' and 'sentiment' if you want both)
 header = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
