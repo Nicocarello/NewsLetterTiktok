@@ -36,14 +36,11 @@ if not GEMINI_API_KEY:
     logging.error("Missing GEMINI_API_KEY environment variable. Exiting.")
     sys.exit(1)
 
-import google.generativeai as genai
 genai.configure(api_key=GEMINI_API_KEY)
-
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
 model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 
-VALID_SENTIMENTS = {"POSITIVO", "NEGATIVO", "NEUTRO"}
-
+# Validate other required envs
 if not GOOGLE_CREDENTIALS_ENV:
     logging.error("Missing GOOGLE_CREDENTIALS environment variable. Exiting.")
     sys.exit(1)
@@ -67,7 +64,6 @@ except Exception:
     MAX_ITEMS = 500
 
 TIME_PERIOD = os.getenv("TIME_PERIOD", "last_day")
-# Mantengo la timezone previa (Buenos Aires) para compatibilidad con tu versión actual
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
 
 # Concurrency tunables (env)
@@ -114,7 +110,7 @@ def safe_convert_date_col(df, col='date_utc'):
         df[col] = df[col].astype(str).fillna('')
     return df
 
-# Optional helper (mantengo por compatibilidad)
+# Optional helper
 import calendar
 def format_week_range(date_str):
     if not date_str or pd.isna(date_str):
@@ -213,8 +209,8 @@ else:
 
 final_df = safe_convert_date_col(final_df, 'date_utc')
 
-# Ensure additional columns exist
-for col in ('sentiment', 'semana', 'tag', 'article_body'):
+# Ensure additional columns exist (we'll store classification in 'tag')
+for col in ('tag', 'semana', 'article_body', 'sentiment'):
     if col not in final_df.columns:
         final_df[col] = ''
 
@@ -313,11 +309,13 @@ save_cache(CACHE_PATH, article_cache)
 final_df['link'] = final_df['link'].astype(str)
 final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_key(u), '')).fillna('')
 
-# --- Filtering: keep rows that mention the pattern in title OR snippet OR article_body ---
+# ---------------------------
+# Filtro robusto (keep only rows mentioning TikTok)
+# ---------------------------
 mask = (
-    final_df['title'].str.contains(TIKTOK_PATTERN, na=False) |
-    final_df['snippet'].str.contains(TIKTOK_PATTERN, na=False) |
-    final_df['article_body'].str.contains(TIKTOK_PATTERN, na=False)
+    final_df.get('title', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
+    final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
+    final_df.get('article_body', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
 )
 before_tot = len(final_df)
 final_df = final_df[mask].copy()
@@ -325,9 +323,8 @@ after_tot = len(final_df)
 logging.info("After body verification filter: %d -> %d rows (removed %d)", before_tot, after_tot, before_tot - after_tot)
 
 # ---------------------------
-# CATEGORIZACIÓN POST-FILTER (devuelve 'category')
+# CATEGORIZACIÓN POST-FILTER (devuelve una de las etiquetas y la guarda en 'tag')
 # ---------------------------
-from bs4 import BeautifulSoup
 
 # Canonical categories (exact output strings expected in the sheet)
 CANONICAL_CATEGORIES = [
@@ -354,7 +351,6 @@ NORMALIZATION_MAP = {
     "CREATORS": "Creator",
     "PRODUCT": "Product",
     "TNS": "TnS",
-    "TnS".upper(): "TnS",
     "TRUST AND SAFETY": "TnS",
     "MODERATION": "TnS",
     "CORPORATE REPUTATION": "Corporate Reputation",
@@ -458,32 +454,72 @@ NOTICIA:
 """
     return prompt
 
+# --- Limpieza variable obsoleta si estaba presente ---
+try:
+    del VALID_SENTIMENTS
+except NameError:
+    pass
+
+# --- Category cache (tag_cache) ---
+CATEGORY_CACHE_PATH = os.getenv("CATEGORY_CACHE_PATH", "category_cache.json")
+try:
+    if os.path.exists(CATEGORY_CACHE_PATH):
+        with open(CATEGORY_CACHE_PATH, "r", encoding="utf-8") as fh:
+            tag_cache = json.load(fh)
+    else:
+        tag_cache = {}
+except Exception:
+    tag_cache = {}
+
+# Wrapper para llamar al modelo con retry y parsing defensivo
+def _call_model_with_retry(prompt, max_attempts=3):
+    return retry(lambda: model.generate_content(prompt), max_attempts=max_attempts)
+
 def categorize_text_with_model(texto):
     try:
         prompt = build_prompt_from_text(texto)
-        resp = model.generate_content(prompt)
-        raw = resp.text if hasattr(resp, "text") else str(resp)
+        try:
+            resp = _call_model_with_retry(prompt, max_attempts=3)
+        except Exception as e:
+            logging.warning("Model call failed after retries: %s", e)
+            return "Corporate Reputation"
+
+        raw = ""
+        try:
+            raw = getattr(resp, "text", None) or ""
+        except Exception:
+            raw = ""
+
+        if not raw:
+            try:
+                cand = getattr(resp, "candidates", None)
+                if cand and len(cand) > 0:
+                    raw = getattr(cand[0], "content", "") or str(cand[0])
+            except Exception:
+                raw = str(resp)
+
         return normalize_category_from_model_output(raw)
     except Exception as e:
         logging.warning("Error categorizando texto con model: %s", e)
         return "Corporate Reputation"
 
 def categorize_row_obtaining_text(row):
-    """
-    Entrada: row dict con keys 'index','link','article_body'.
-    Prioriza article_body (cache). Si no existe, intenta fetch+parse rápido.
-    """
     url = (row.get("link") or "").strip()
+    k = url_key(url)
+
+    # Cache hit
+    if k and k in tag_cache:
+        return tag_cache[k]
+
     body = (row.get("article_body") or "").strip()
     if not body and url:
-        # Intentamos recuperar HTML usando helpers existentes
         try:
             html = fetch_html_with_retries(url)
             if html:
                 body = extract_body_from_html(url, html)
         except Exception:
             body = ""
-    # Si aún no hay body, extraemos párrafos con BeautifulSoup (último recurso)
+
     if not body and url:
         try:
             resp = session.get(url, timeout=REQUEST_TIMEOUT)
@@ -493,15 +529,22 @@ def categorize_row_obtaining_text(row):
                 body = " ".join(paragraphs)
         except Exception:
             body = ""
-    # Finalmente categorizamos
+
     category = categorize_text_with_model(body)
+
+    if k:
+        try:
+            tag_cache[k] = category
+        except Exception:
+            pass
+
     return category
 
-# Preparar filas a categorizar: usamos el índice actual para mapear resultados con seguridad
+# Ejecutar clasificación en paralelo
 rows_to_categorize = final_df.reset_index()[["index","link","article_body"]].to_dict(orient="records")
 logging.info("Starting category classification for %d rows (workers=%d)...", len(rows_to_categorize), MAX_FETCH_WORKERS)
 
-categories_map = {}  # index -> category
+categories_map = {}
 with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
     futures = {ex.submit(categorize_row_obtaining_text, r): r for r in rows_to_categorize}
     for fut in as_completed(futures):
@@ -513,15 +556,21 @@ with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
             category = "Corporate Reputation"
         categories_map[r["index"]] = category
 
-# Asignar resultado de clasificación en la columna 'tag' (respetando índices originales)
-final_df = final_df.reset_index()  # crea columna 'index' con los índices originales
+# Asignar resultado en 'tag'
+final_df = final_df.reset_index()
 final_df["tag"] = final_df["index"].map(lambda i: categories_map.get(i, "Corporate Reputation"))
 final_df = final_df.drop(columns=["index"]).reset_index(drop=True)
 
 logging.info("Category classification completed. Distribution: %s", final_df["tag"].value_counts().to_dict())
 
+# Persistir tag cache
+try:
+    with open(CATEGORY_CACHE_PATH, "w", encoding="utf-8") as fh:
+        json.dump(tag_cache, fh, ensure_ascii=False, indent=2)
+except Exception as e:
+    logging.warning("No se pudo guardar category cache: %s", e)
 
-# Ensure column order and presence
+# Ensure column order and presence (header keeps 'tag' and 'sentiment' if you want both)
 header = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
 final_df = final_df.drop_duplicates(subset='link')
