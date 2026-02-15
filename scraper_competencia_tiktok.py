@@ -186,7 +186,8 @@ except Exception:
 
 # Ensure column order and presence
 header = ['date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
-final_df = final_df.reindex(columns=header, fill_value='')
+final_df = final_df.reindex(columns=header)
+final_df = final_df.fillna('')
 
 #keep rows that contain youtube, facebook, instagram, snapchat, twitter, twitch, google in the title or snippet (case-insensitive)
 keywords = ['youtube', 'facebook', 'instagram', 'snapchat', 'twitter', 'twitch', 'google']
@@ -209,7 +210,9 @@ except Exception as e:
 if values:
     try:
         existing_df = pd.DataFrame(values[1:], columns=values[0])
-        existing_df = existing_df.reindex(columns=header, fill_value='')
+        existing_df = existing_df.reindex(columns=header)
+        existing_df = existing_df.fillna('')
+
     except Exception as e:
         logging.exception("Error parsing existing sheet values into DataFrame: %s", e)
         existing_df = pd.DataFrame(columns=header)
