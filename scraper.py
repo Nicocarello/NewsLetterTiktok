@@ -5,6 +5,7 @@ from google.oauth2 import service_account
 from googleapiclient.errors import HttpError
 from apify_client import ApifyClient
 from newspaper import Article
+from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
 import requests
@@ -27,6 +28,8 @@ GOOGLE_CREDENTIALS_ENV = os.getenv("GOOGLE_CREDENTIALS")
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14")
 ACTOR_ID = os.getenv("ACTOR_ID", "easyapi/google-news-scraper")
+
+VALID_SENTIMENTS = {"POSITIVO", "NEGATIVO", "NEUTRO"}
 
 if not GOOGLE_CREDENTIALS_ENV:
     logging.error("Missing GOOGLE_CREDENTIALS environment variable. Exiting.")
@@ -307,6 +310,203 @@ before_tot = len(final_df)
 final_df = final_df[mask].copy()
 after_tot = len(final_df)
 logging.info("After body verification filter: %d -> %d rows (removed %d)", before_tot, after_tot, before_tot - after_tot)
+
+# ---------------------------
+# CATEGORIZACIÓN POST-FILTER (devuelve 'category')
+# ---------------------------
+from bs4 import BeautifulSoup
+
+# Canonical categories (exact output strings expected in the sheet)
+CANONICAL_CATEGORIES = [
+    "Consumer & Brand",
+    "Music",
+    "B2B",
+    "SMB",
+    "Creator",
+    "Product",
+    "TnS",
+    "Corporate Reputation",
+]
+
+# Normalization map: posibles tokens/respuestas del modelo -> categoría canónica
+NORMALIZATION_MAP = {
+    "CONSUMER & BRAND": "Consumer & Brand",
+    "CONSUMER AND BRAND": "Consumer & Brand",
+    "CONSUMER": "Consumer & Brand",
+    "BRAND": "Consumer & Brand",
+    "MUSIC": "Music",
+    "B2B": "B2B",
+    "SMB": "SMB",
+    "CREATOR": "Creator",
+    "CREATORS": "Creator",
+    "PRODUCT": "Product",
+    "TNS": "TnS",
+    "TnS".upper(): "TnS",
+    "TRUST AND SAFETY": "TnS",
+    "MODERATION": "TnS",
+    "CORPORATE REPUTATION": "Corporate Reputation",
+    "CORPORATE": "Corporate Reputation",
+    "REPUTATION": "Corporate Reputation",
+    "LEGAL": "Corporate Reputation",
+    "REGULATORY": "Corporate Reputation",
+    "REGULATION": "Corporate Reputation",
+    "GOVERNMENT": "Corporate Reputation",
+}
+
+def normalize_category_from_model_output(raw_text):
+    """
+    Convierte la respuesta libre del modelo a UNA categoría canónica.
+    Si no se puede mapear, devuelve fallback 'Corporate Reputation'.
+    """
+    if not raw_text:
+        return "Corporate Reputation"
+    r = raw_text.strip().upper()
+    # Elimina puntuación común que pueda acompañar la respuesta
+    r_clean = re.sub(r"[\"'\.\,]", " ", r)
+    # 1) Match por presencia de frases completas (búsqueda prioritaria)
+    for key, canonical in NORMALIZATION_MAP.items():
+        if key in r_clean:
+            return canonical
+    # 2) Token match: dividir y buscar tokens mapeables
+    for token in re.split(r"[\s,;:()\[\]\"']+", r_clean):
+        token = token.strip()
+        if not token:
+            continue
+        if token in NORMALIZATION_MAP:
+            return NORMALIZATION_MAP[token]
+    # 3) Intentar buscar las categorías canónicas textualmente (safety)
+    for can in CANONICAL_CATEGORIES:
+        if can.upper() in r:
+            return can
+    # 4) Fallback estratégico
+    logging.warning("Salida de modelo no mapeable a categoría: %s", raw_text)
+    return "Corporate Reputation"
+
+def build_prompt_from_text(texto):
+    max_chars = 12000
+    t = (texto or "").strip()
+    if len(t) > max_chars:
+        t = t[:max_chars]
+
+    prompt = f"""
+ROL
+Actúa como un Analista de Datos Senior especializado en PR y Reputación Corporativa de TikTok.
+Tu única misión es clasificar la noticia en UNA sola categoría estratégica.
+
+OBJETIVO
+Determinar cuál es el eje principal de la noticia en relación con TikTok como empresa.
+
+CATEGORÍAS DISPONIBLES (elige SOLO UNA)
+
+1. Corporate Reputation
+   Asuntos legales, regulatorios, política pública, audiencias gubernamentales,
+   crisis institucionales, demandas, prohibiciones o conflictos con gobiernos.
+
+2. TnS
+   Moderación de contenido, Normas de la Comunidad, seguridad de menores,
+   desinformación o políticas de seguridad.
+
+3. Product
+   Nuevas funciones, cambios técnicos, actualizaciones de interfaz,
+   modificaciones del algoritmo o features de la app.
+
+4. Creator
+   Creadores de contenido, monetización, incentivos, programas para creators.
+
+5. SMB
+   Pequeñas y medianas empresas, negocios locales usando TikTok.
+
+6. B2B
+   Soluciones publicitarias, Global Business Solutions, TikTok Shop para grandes marcas.
+
+7. Music
+   Industria musical, artistas, acuerdos de licencias (si NO es campaña de marca).
+
+8. Consumer & Brand
+   Campañas masivas (#YearOnTikTok, TikTok Awards), tendencias culturales
+   (#BookTok) o grandes activaciones de marca.
+
+REGLA DE PRIORIDAD (OBLIGATORIA)
+Si la noticia impacta la imagen institucional, legal o regulatoria de la empresa,
+la categoría SIEMPRE es: Corporate Reputation,
+aunque también mencione Producto, Música o Creadores.
+
+INSTRUCCIONES CRÍTICAS
+- Analiza el enfoque principal de la noticia.
+- Elige SOLO una categoría.
+- No combines categorías.
+- No expliques tu razonamiento.
+- No agregues puntuación.
+- No agregues texto adicional.
+- Responde únicamente con el nombre exacto de la categoría (por ejemplo: "Product" o "Corporate Reputation").
+
+NOTICIA:
+{t}
+"""
+    return prompt
+
+def categorize_text_with_model(texto):
+    try:
+        prompt = build_prompt_from_text(texto)
+        resp = model.generate_content(prompt)  # <-- asegúrate de tener `model` instanciado
+        raw = getattr(resp, "text", None) or str(resp)
+        return normalize_category_from_model_output(raw)
+    except Exception as e:
+        logging.warning("Error categorizando texto con model: %s", e)
+        return "Corporate Reputation"
+
+def categorize_row_obtaining_text(row):
+    """
+    Entrada: row dict con keys 'index','link','article_body'.
+    Prioriza article_body (cache). Si no existe, intenta fetch+parse rápido.
+    """
+    url = (row.get("link") or "").strip()
+    body = (row.get("article_body") or "").strip()
+    if not body and url:
+        # Intentamos recuperar HTML usando helpers existentes
+        try:
+            html = fetch_html_with_retries(url)
+            if html:
+                body = extract_body_from_html(url, html)
+        except Exception:
+            body = ""
+    # Si aún no hay body, extraemos párrafos con BeautifulSoup (último recurso)
+    if not body and url:
+        try:
+            resp = session.get(url, timeout=REQUEST_TIMEOUT)
+            if resp.status_code == 200 and resp.text:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                paragraphs = [p.get_text(separator=" ", strip=True) for p in soup.find_all("p")]
+                body = " ".join(paragraphs)
+        except Exception:
+            body = ""
+    # Finalmente categorizamos
+    category = categorize_text_with_model(body)
+    return category
+
+# Preparar filas a categorizar: usamos el índice actual para mapear resultados con seguridad
+rows_to_categorize = final_df.reset_index()[["index","link","article_body"]].to_dict(orient="records")
+logging.info("Starting category classification for %d rows (workers=%d)...", len(rows_to_categorize), MAX_FETCH_WORKERS)
+
+categories_map = {}  # index -> category
+with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
+    futures = {ex.submit(categorize_row_obtaining_text, r): r for r in rows_to_categorize}
+    for fut in as_completed(futures):
+        r = futures[fut]
+        try:
+            category = fut.result()
+        except Exception as e:
+            logging.warning("Error classifying row (link=%s): %s", r.get("link"), e)
+            category = "Corporate Reputation"
+        categories_map[r["index"]] = category
+
+# Asignar columna 'category' en final_df respetando índices originales
+final_df = final_df.reset_index()  # crea columna 'index' con los índices originales
+final_df["category"] = final_df["index"].map(lambda i: categories_map.get(i, "Corporate Reputation"))
+final_df = final_df.drop(columns=["index"]).reset_index(drop=True)
+
+logging.info("Category classification completed. Distribution: %s", final_df["category"].value_counts().to_dict())
+
 
 # Ensure column order and presence
 header = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
