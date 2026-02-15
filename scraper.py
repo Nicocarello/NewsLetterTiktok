@@ -602,51 +602,47 @@ except Exception as e:
 # SENTIMENT CLASSIFICATION (POSITIVO / NEGATIVO / NEUTRO) - usando Gemini
 # ---------------------------
 
-def analizar_noticia(url: str, *, retries: int = 3) -> str:
-    """Devuelve POSITIVO/NEGATIVO/NEUTRO. Falla segura a NEUTRO."""
+def analizar_noticia(url):
     try:
-        html = download_html(url)
-        if not html:
-            # Loguea si el HTML no se pudo descargar
-            log.info(f"Análisis NEUTRO (HTML vacío o descarga fallida): {url}")
-            return "NEUTRO"
-            
-        texto = extract_visible_text(html, max_chars=5000)
-        if not texto or len(texto) < 120:
-            # Loguea si el texto es muy corto (probable JS)
-            log.info(f"Análisis NEUTRO (Texto extraído muy corto: {len(texto)} chars): {url}")
-            return "NEUTRO"
+        # Descargar la página
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        # Si llegamos aquí, SÍ vamos a llamar a Gemini
-        log.info(f"Llamando a Gemini para: {url}")
-        prompt = SENT_PROMPT_TMPL.format(texto=texto)
+        # Extraer solo el texto visible
+        paragraphs = [p.get_text() for p in soup.find_all("p")]
+        texto = " ".join(paragraphs)  
 
-        for attempt in range(retries):
-            try:
-                resp = model.generate_content(prompt)
-                out = (resp.text or "").strip().upper()
-                m = re.search(r"[A-ZÁÉÍÓÚÜÑ]+", out)  # tomar la primera palabra alfabética
-                label = m.group(0) if m else out
-                
-                final_label = label if label in SENTIMENT_LABELS else "NEUTRO"
-                
-                # Loguea el resultado de Gemini
-                log.info(f"Gemini devolvió: {final_label} (raw: '{out[:50]}...')")
-                return final_label
-                
-            except Exception as e:
-                if attempt < retries - 1:
-                    sleep(1.5 * (2 ** attempt))
-                    continue
-                # Loguea si Gemini falló
-                log.warning(f"Análisis NEUTRO (Error de Gemini en {url}): {e}")
-                return "NEUTRO"
+        # Prompt claro y forzado a solo una palabra
+        prompt = f"""
+        ROL
+Actúa como Analista Senior de PR/Reputación. Tu única tarea es determinar si la noticia
+es POSITIVA, NEGATIVA o NEUTRA respecto a la reputación de TikTok como empresa/plataforma.
+
+INSTRUCCIONES (leer atentamente)
+- Analiza SOLO el texto provisto.
+- Responde únicamente con UNA de las tres palabras EXACTAS (en mayúsculas): POSITIVO, NEGATIVO o NEUTRO.
+- No añadas puntuación, explicaciones ni ningún otro texto.
+- Si no puedes clasificar por falta de información, responde EXACTAMENTE: NEUTRO
+- Respuestas aceptadas: ['POSITIVO','NEGATIVO','NEUTRO']
+
+NOTICIA:
+        {texto}
+        """
+
+        # Usar el modelo que ya inicializaste afuera
+        response = model.generate_content(prompt)
+        resultado = response.text.strip().upper()
+
+        # Validación por seguridad
+        if resultado not in ["POSITIVO", "NEGATIVO", "NEUTRO"]:
+            return "NEUTRO"
+        return resultado
 
     except Exception as e:
-        # Loguea si hubo un error general
-        log.warning(f"Análisis NEUTRO (Error procesando {url}): {e}")
+        print(f"Error procesando {url}: {e}")
         return "NEUTRO"
 
+final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
 
 # Ensure column order and presence (header keeps 'tag' and 'sentiment' if you want both)
 header = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
