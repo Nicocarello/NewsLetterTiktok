@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.errors import HttpError
+import google.generativeai as genai
 from apify_client import ApifyClient
 from newspaper import Article
 from bs4 import BeautifulSoup
@@ -28,6 +29,18 @@ GOOGLE_CREDENTIALS_ENV = os.getenv("GOOGLE_CREDENTIALS")
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14")
 ACTOR_ID = os.getenv("ACTOR_ID", "easyapi/google-news-scraper")
+
+# --- Gemini config ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    logging.error("Missing GEMINI_API_KEY environment variable. Exiting.")
+    sys.exit(1)
+
+import google.generativeai as genai
+genai.configure(api_key=GEMINI_API_KEY)
+
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
+model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 
 VALID_SENTIMENTS = {"POSITIVO", "NEGATIVO", "NEUTRO"}
 
@@ -214,7 +227,7 @@ except Exception:
 
 # --- Article fetch + parse w/ Session + ThreadPool (cache simple) ---
 CACHE_PATH = os.getenv("ARTICLE_CACHE_PATH", "article_cache.json")
-MAX_FETCH_WORKERS = int(os.getenv("MAX_FETCH_WORKERS", "6"))
+MAX_FETCH_WORKERS = int(os.getenv("MAX_FETCH_WORKERS", "3"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "15"))
 REQUEST_RETRIES = int(os.getenv("REQUEST_RETRIES", "2"))
 REQUEST_SLEEP_BETWEEN = float(os.getenv("REQUEST_SLEEP_BETWEEN", "0.2"))
@@ -448,8 +461,8 @@ NOTICIA:
 def categorize_text_with_model(texto):
     try:
         prompt = build_prompt_from_text(texto)
-        resp = model.generate_content(prompt)  # <-- asegúrate de tener `model` instanciado
-        raw = getattr(resp, "text", None) or str(resp)
+        resp = model.generate_content(prompt)
+        raw = resp.text if hasattr(resp, "text") else str(resp)
         return normalize_category_from_model_output(raw)
     except Exception as e:
         logging.warning("Error categorizando texto con model: %s", e)
@@ -500,12 +513,12 @@ with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
             category = "Corporate Reputation"
         categories_map[r["index"]] = category
 
-# Asignar columna 'category' en final_df respetando índices originales
+# Asignar resultado de clasificación en la columna 'tag' (respetando índices originales)
 final_df = final_df.reset_index()  # crea columna 'index' con los índices originales
-final_df["category"] = final_df["index"].map(lambda i: categories_map.get(i, "Corporate Reputation"))
+final_df["tag"] = final_df["index"].map(lambda i: categories_map.get(i, "Corporate Reputation"))
 final_df = final_df.drop(columns=["index"]).reset_index(drop=True)
 
-logging.info("Category classification completed. Distribution: %s", final_df["category"].value_counts().to_dict())
+logging.info("Category classification completed. Distribution: %s", final_df["tag"].value_counts().to_dict())
 
 
 # Ensure column order and presence
