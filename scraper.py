@@ -397,6 +397,19 @@ def build_prompt_from_text(texto):
     if len(t) > max_chars:
         t = t[:max_chars]
 
+    # Lista exacta de salidas permitidas (cópiala exactamente)
+    allowed = [
+        "Consumer & Brand",
+        "Music",
+        "B2B",
+        "SMB",
+        "Creator",
+        "Product",
+        "TnS",
+        "Corporate Reputation",
+    ]
+    allowed_line = ", ".join(allowed)
+
     prompt = f"""
 ROL
 Actúa como un Analista de Datos Senior especializado en PR y Reputación Corporativa de TikTok.
@@ -406,53 +419,32 @@ OBJETIVO
 Determinar cuál es el eje principal de la noticia en relación con TikTok como empresa.
 
 CATEGORÍAS DISPONIBLES (elige SOLO UNA)
-
-1. Corporate Reputation
-   Asuntos legales, regulatorios, política pública, audiencias gubernamentales,
-   crisis institucionales, demandas, prohibiciones o conflictos con gobiernos.
-
-2. TnS
-   Moderación de contenido, Normas de la Comunidad, seguridad de menores,
-   desinformación o políticas de seguridad.
-
-3. Product
-   Nuevas funciones, cambios técnicos, actualizaciones de interfaz,
-   modificaciones del algoritmo o features de la app.
-
-4. Creator
-   Creadores de contenido, monetización, incentivos, programas para creators.
-
-5. SMB
-   Pequeñas y medianas empresas, negocios locales usando TikTok.
-
-6. B2B
-   Soluciones publicitarias, Global Business Solutions, TikTok Shop para grandes marcas.
-
-7. Music
-   Industria musical, artistas, acuerdos de licencias (si NO es campaña de marca).
-
-8. Consumer & Brand
-   Campañas masivas (#YearOnTikTok, TikTok Awards), tendencias culturales
-   (#BookTok) o grandes activaciones de marca.
+- Consumer & Brand
+- Music
+- B2B
+- SMB
+- Creator
+- Product
+- TnS
+- Corporate Reputation
 
 REGLA DE PRIORIDAD (OBLIGATORIA)
 Si la noticia impacta la imagen institucional, legal o regulatoria de la empresa,
-la categoría SIEMPRE es: Corporate Reputation,
-aunque también mencione Producto, Música o Creadores.
+la categoría SIEMPRE es: Corporate Reputation.
 
-INSTRUCCIONES CRÍTICAS
-- Analiza el enfoque principal de la noticia.
-- Elige SOLO una categoría.
-- No combines categorías.
-- No expliques tu razonamiento.
-- No agregues puntuación.
-- No agregues texto adicional.
-- Responde únicamente con el nombre exacto de la categoría (por ejemplo: "Product" o "Corporate Reputation").
+INSTRUCCIONES CRÍTICAS (LEER ATENTAMENTE)
+1) ANALIZA la noticia provista abajo.
+2) RESPONDE EXACTAMENTE con UNA de las siguientes cadenas (sin comillas, sin punto final, sin texto extra, sin explicación): 
+   {allowed_line}
+3) RESPONDE SOLO con la cadena EXACTA: por ejemplo: Product  (sin comillas)
+4) Si por alguna razón NO PUEDES CLASIFICAR (texto ausente o incompleto), RESPONDE EXACTAMENTE: Corporate Reputation
+5) NO agregues ninguna otra palabra, puntuación ni carácter.
 
 NOTICIA:
 {t}
 """
     return prompt
+
 
 # --- Limpieza variable obsoleta si estaba presente ---
 try:
@@ -476,14 +468,34 @@ def _call_model_with_retry(prompt, max_attempts=3):
     return retry(lambda: model.generate_content(prompt), max_attempts=max_attempts)
 
 def categorize_text_with_model(texto):
+    """
+    Llama al LLM con parámetros controlados (temperature=0) y parseo defensivo.
+    """
     try:
+        # Si el modelo no está inicializado (opción B), devolver fallback
+        if model is None:
+            logging.debug("Model not initialized — returning fallback category")
+            return "Corporate Reputation"
+
         prompt = build_prompt_from_text(texto)
+
+        # Llamada determinista y corta: temperatura=0, tope de tokens de salida pequeño
+        # Nota: la firma exacta depende del SDK; usamos kwargs comunes.
+        def call():
+            try:
+                return model.generate_content(prompt, temperature=0, max_output_tokens=20)
+            except TypeError:
+                # si SDK no acepta esos nombres, intentar sin kwargs
+                return model.generate_content(prompt)
+
+        # usar tu retry wrapper para tolerar 429/errores temporales
         try:
-            resp = _call_model_with_retry(prompt, max_attempts=3)
+            resp = retry(call, max_attempts=3)
         except Exception as e:
             logging.warning("Model call failed after retries: %s", e)
             return "Corporate Reputation"
 
+        # parsing defensivo
         raw = ""
         try:
             raw = getattr(resp, "text", None) or ""
@@ -492,16 +504,31 @@ def categorize_text_with_model(texto):
 
         if not raw:
             try:
+                # algunos SDK devuelven candidates -> content
                 cand = getattr(resp, "candidates", None)
                 if cand and len(cand) > 0:
                     raw = getattr(cand[0], "content", "") or str(cand[0])
             except Exception:
                 raw = str(resp)
 
-        return normalize_category_from_model_output(raw)
+        raw = (raw or "").strip()
+
+        # DEBUG: log breve de respuestas inesperadas (puedes bajar a DEBUG level después)
+        if raw.startswith("(") or raw.lower().startswith("por favor") or "proporciona la noticia" in raw.lower():
+            logging.warning("Modelo retornó mensaje de sistema/clarificación: %s", raw)
+            return "Corporate Reputation"
+
+        # Normalizar y mapear a categoría
+        cat = normalize_category_from_model_output(raw)
+        if cat == "Corporate Reputation" and raw.upper() not in [c.upper() for c in CANONICAL_CATEGORIES]:
+            # si normalizador cae en fallback, loguear raw para debugging (no inunda logs)
+            logging.warning("Salida de modelo no mapeable a categoría: %s", raw)
+        return cat
+
     except Exception as e:
         logging.warning("Error categorizando texto con model: %s", e)
         return "Corporate Reputation"
+
 
 def categorize_row_obtaining_text(row):
     url = (row.get("link") or "").strip()
