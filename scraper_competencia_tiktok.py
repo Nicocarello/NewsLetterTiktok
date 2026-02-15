@@ -32,6 +32,16 @@ APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14")
 ACTOR_ID = os.getenv("ACTOR_ID", "easyapi/google-news-scraper")
 
+# --- Gemini config ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    logging.error("Missing GEMINI_API_KEY environment variable. Exiting.")
+    sys.exit(1)
+
+genai.configure(api_key=GEMINI_API_KEY)
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
+model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+
 if not GOOGLE_CREDENTIALS_ENV:
     logging.error("Missing GOOGLE_CREDENTIALS environment variable. Exiting.")
     sys.exit(1)
