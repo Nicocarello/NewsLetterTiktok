@@ -230,6 +230,59 @@ combined_df = combined_df.reset_index(drop=True)
 combined_df = combined_df.replace([np.nan, pd.NaT, None], '')
 combined_df = combined_df.replace([np.inf, -np.inf], '')
 
+def clasificar_sentiment_noticia(url):
+    try:
+        # Descargar la página
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Extraer solo el texto visible
+        paragraphs = [p.get_text() for p in soup.find_all("p")]
+        texto = " ".join(paragraphs)  
+
+        # Prompt claro y forzado a solo una palabra
+        prompt = f"""
+         ROL
+
+Actúa como Analista Senior de PR/Reputación. Tu única tarea es determinar si la noticia
+
+es POSITIVA, NEGATIVA o NEUTRA respecto a la reputación del medio/red social como empresa/plataforma.
+
+INSTRUCCIONES (leer atentamente)
+
+- Analiza SOLO el texto provisto.
+
+- Responde únicamente con UNA de las tres palabras EXACTAS (en mayúsculas): POSITIVO, NEGATIVO o NEUTRO.
+
+- No añadas puntuación, explicaciones ni ningún otro texto.
+
+- Si no puedes clasificar por falta de información, responde EXACTAMENTE: NEUTRO
+
+- Respuestas aceptadas: ['POSITIVO','NEGATIVO','NEUTRO']
+        {texto}
+        """
+
+        # Usar el modelo que ya inicializaste afuera
+        response = model.generate_content(prompt)
+        resultado = response.text.strip().upper()
+
+        # Validación por seguridad
+        if resultado not in ["POSITIVO", "NEGATIVO", "NEUTRO"]:
+            return "NEUTRO"
+        return resultado
+
+    except Exception as e:
+        print(f"Error procesando {url}: {e}")
+        return "NEUTRO"
+
+# Crear columna con sentimiento
+combined_df["sentiment"] = combined_df["link"].apply(analizar_noticia)
+
+# clasificar tag
+
+
+
+
 def sanitize_cell(cell):
     # Numpy scalar numeric types
     if isinstance(cell, (np.integer,)):
