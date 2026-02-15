@@ -2,7 +2,7 @@ name: Run Competencia Scraper
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "0 10 * * *"
   workflow_dispatch:      # permite correrlo manualmente también
 
 jobs:
