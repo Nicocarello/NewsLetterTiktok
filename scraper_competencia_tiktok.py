@@ -242,112 +242,112 @@ combined_df = combined_df.reset_index(drop=True)
 combined_df = combined_df.replace([np.nan, pd.NaT, None], '')
 combined_df = combined_df.replace([np.inf, -np.inf], '')
 
-def clasificar_sentiment_noticia(url):
-    try:
-        # Descargar la página
-        response = requests.get(url, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
+# def clasificar_sentiment_noticia(url):
+#     try:
+#         # Descargar la página
+#         response = requests.get(url, timeout=10)
+#         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Extraer solo el texto visible
-        paragraphs = [p.get_text() for p in soup.find_all("p")]
-        texto = " ".join(paragraphs)  
+#         # Extraer solo el texto visible
+#         paragraphs = [p.get_text() for p in soup.find_all("p")]
+#         texto = " ".join(paragraphs)  
 
-        # Prompt claro y forzado a solo una palabra
-        prompt = f"""
-         ROL
+#         # Prompt claro y forzado a solo una palabra
+#         prompt = f"""
+#          ROL
 
-Actúa como Analista Senior de PR/Reputación. Tu única tarea es determinar si la noticia
+# Actúa como Analista Senior de PR/Reputación. Tu única tarea es determinar si la noticia
 
-es POSITIVA, NEGATIVA o NEUTRA respecto a la reputación del medio/red social como empresa/plataforma.
+# es POSITIVA, NEGATIVA o NEUTRA respecto a la reputación del medio/red social como empresa/plataforma.
 
-INSTRUCCIONES (leer atentamente)
+# INSTRUCCIONES (leer atentamente)
 
-- Analiza SOLO el texto provisto.
+# - Analiza SOLO el texto provisto.
 
-- Responde únicamente con UNA de las tres palabras EXACTAS (en mayúsculas): POSITIVO, NEGATIVO o NEUTRO.
+# - Responde únicamente con UNA de las tres palabras EXACTAS (en mayúsculas): POSITIVO, NEGATIVO o NEUTRO.
 
-- No añadas puntuación, explicaciones ni ningún otro texto.
+# - No añadas puntuación, explicaciones ni ningún otro texto.
 
-- Si no puedes clasificar por falta de información, responde EXACTAMENTE: NEUTRO
+# - Si no puedes clasificar por falta de información, responde EXACTAMENTE: NEUTRO
 
-- Respuestas aceptadas: ['POSITIVO','NEGATIVO','NEUTRO']
-        {texto}
-        """
+# - Respuestas aceptadas: ['POSITIVO','NEGATIVO','NEUTRO']
+#         {texto}
+#         """
 
-        # Usar el modelo que ya inicializaste afuera
-        response = model.generate_content(prompt)
-        resultado = response.text.strip().upper()
+#         # Usar el modelo que ya inicializaste afuera
+#         response = model.generate_content(prompt)
+#         resultado = response.text.strip().upper()
 
-        # Validación por seguridad
-        if resultado not in ["POSITIVO", "NEGATIVO", "NEUTRO"]:
-            return "NEUTRO"
-        return resultado
+#         # Validación por seguridad
+#         if resultado not in ["POSITIVO", "NEGATIVO", "NEUTRO"]:
+#             return "NEUTRO"
+#         return resultado
 
-    except Exception as e:
-        print(f"Error procesando {url}: {e}")
-        return "NEUTRO"
+#     except Exception as e:
+#         print(f"Error procesando {url}: {e}")
+#         return "NEUTRO"
 
-# Crear columna con sentimiento
-combined_df["sentiment"] = combined_df["link"].apply(clasificar_sentiment_noticia)
+# # Crear columna con sentimiento
+# combined_df["sentiment"] = combined_df["link"].apply(clasificar_sentiment_noticia)
 
-# clasificar tag
+# # clasificar tag
 
-def clasificar_tag_noticia(url):
-    try:
-        # Descargar la página
-        response = requests.get(url, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
+# def clasificar_tag_noticia(url):
+#     try:
+#         # Descargar la página
+#         response = requests.get(url, timeout=10)
+#         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Extraer solo el texto visible
-        paragraphs = [p.get_text() for p in soup.find_all("p")]
-        texto = " ".join(paragraphs)  
+#         # Extraer solo el texto visible
+#         paragraphs = [p.get_text() for p in soup.find_all("p")]
+#         texto = " ".join(paragraphs)  
 
-        # Prompt claro y forzado a solo una palabra
-        prompt = f"""
-        ROL
-Actúa como un Analista de Datos Senior especializado en PR y Reputación Corporativa de empresas de redes sociales.
-Tu única misión es clasificar la noticia en UNA sola categoría estratégica.
+#         # Prompt claro y forzado a solo una palabra
+#         prompt = f"""
+#         ROL
+# Actúa como un Analista de Datos Senior especializado en PR y Reputación Corporativa de empresas de redes sociales.
+# Tu única misión es clasificar la noticia en UNA sola categoría estratégica.
 
-OBJETIVO
-Determinar cuál es el eje principal de la noticia en relación con TikTok como empresa.
+# OBJETIVO
+# Determinar cuál es el eje principal de la noticia en relación con TikTok como empresa.
 
-CATEGORÍAS DISPONIBLES (elige SOLO UNA)
-- Consumer & Brand
-- Music
-- B2B
-- SMB
-- Creator
-- Product
-- TnS
-- Corporate Reputation
+# CATEGORÍAS DISPONIBLES (elige SOLO UNA)
+# - Consumer & Brand
+# - Music
+# - B2B
+# - SMB
+# - Creator
+# - Product
+# - TnS
+# - Corporate Reputation
 
-REGLA DE PRIORIDAD (OBLIGATORIA)
-Si la noticia impacta la imagen institucional, legal o regulatoria de la empresa,
-la categoría SIEMPRE es: Corporate Reputation.
+# REGLA DE PRIORIDAD (OBLIGATORIA)
+# Si la noticia impacta la imagen institucional, legal o regulatoria de la empresa,
+# la categoría SIEMPRE es: Corporate Reputation.
 
-INSTRUCCIONES CRÍTICAS (LEER ATENTAMENTE)
-1) ANALIZA la noticia provista abajo.
-2) RESPONDE EXACTAMENTE con UNA de las siguientes cadenas (sin comillas, sin punto final, sin texto extra, sin explicación): 
-   {allowed_line}
-3) RESPONDE SOLO con la cadena EXACTA: por ejemplo: Product  (sin comillas)
-4) Si por alguna razón NO PUEDES CLASIFICAR (texto ausente o incompleto), RESPONDE EXACTAMENTE: Corporate Reputation
-5) NO agregues ninguna otra palabra, puntuación ni carácter.
-6) Respuestas aceptadas: [Consumer & Brand, Music, B2B, SMB, Creator, Product, TnS, Corporate Reputation]
+# INSTRUCCIONES CRÍTICAS (LEER ATENTAMENTE)
+# 1) ANALIZA la noticia provista abajo.
+# 2) RESPONDE EXACTAMENTE con UNA de las siguientes cadenas (sin comillas, sin punto final, sin texto extra, sin explicación): 
+#    {allowed_line}
+# 3) RESPONDE SOLO con la cadena EXACTA: por ejemplo: Product  (sin comillas)
+# 4) Si por alguna razón NO PUEDES CLASIFICAR (texto ausente o incompleto), RESPONDE EXACTAMENTE: Corporate Reputation
+# 5) NO agregues ninguna otra palabra, puntuación ni carácter.
+# 6) Respuestas aceptadas: [Consumer & Brand, Music, B2B, SMB, Creator, Product, TnS, Corporate Reputation]
 
-NOTICIA:
-        {texto}
-        """
+# NOTICIA:
+#         {texto}
+#         """
 
-        # Usar el modelo que ya inicializaste afuera
-        response = model.generate_content(prompt)
-        resultado = response.text.strip().upper()
+#         # Usar el modelo que ya inicializaste afuera
+#         response = model.generate_content(prompt)
+#         resultado = response.text.strip().upper()
 
-    except Exception as e:
-        print(f"Error procesando {url}: {e}")
-        return "Corporate Reputation"
+#     except Exception as e:
+#         print(f"Error procesando {url}: {e}")
+#         return "Corporate Reputation"
 
-# Crear columna con sentimiento
-combined_df["tag"] = df["link"].apply(clasificar_tag_noticia)
+# # Crear columna con sentimiento
+# combined_df["tag"] = df["link"].apply(clasificar_tag_noticia)
 
 
 def sanitize_cell(cell):
