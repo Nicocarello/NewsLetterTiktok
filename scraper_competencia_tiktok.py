@@ -51,7 +51,7 @@ if not APIFY_TOKEN:
 COUNTRIES = [c.strip() for c in os.getenv("COUNTRIES", "ar,cl,pe").split(",") if c.strip()]
 QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
-    "google,instagram,facebook,snapchat,youtube,twitter,twitch"
+    "youtube,google,instagram,facebook,snapchat,twitter,twitch"
 ).split(",") if q.strip()]
 
 try:
@@ -315,13 +315,15 @@ final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_k
 # ---------------------------
 mask = (
     final_df.get('title', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
-    final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
-    final_df.get('article_body', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
+    final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
 )
+
 before_tot = len(final_df)
 final_df = final_df[mask].copy()
 after_tot = len(final_df)
-logging.info("After body verification filter: %d -> %d rows (removed %d)", before_tot, after_tot, before_tot - after_tot)
+
+logging.info("After title/snippet filter: %d -> %d rows (removed %d)",
+             before_tot, after_tot, before_tot - after_tot)
 
 # ---------------------------
 # CATEGORIZACIÓN POST-FILTER (devuelve una de las etiquetas y la guarda en 'tag')
@@ -413,7 +415,7 @@ def build_prompt_from_text(texto):
 
     prompt = f"""
 ROL
-Actúa como un Analista de Datos Senior especializado en PR y Reputación Corporativa de TikTok.
+Actúa como un Analista de Datos Senior especializado en PR y Reputación Corporativa de empresas de redes sociales.
 Tu única misión es clasificar la noticia en UNA sola categoría estratégica.
 
 OBJETIVO
@@ -440,6 +442,7 @@ INSTRUCCIONES CRÍTICAS (LEER ATENTAMENTE)
 3) RESPONDE SOLO con la cadena EXACTA: por ejemplo: Product  (sin comillas)
 4) Si por alguna razón NO PUEDES CLASIFICAR (texto ausente o incompleto), RESPONDE EXACTAMENTE: Corporate Reputation
 5) NO agregues ninguna otra palabra, puntuación ni carácter.
+6) Respuestas aceptadas: [Consumer & Brand, Music, B2B, SMB, Creator, Product, TnS, Corporate Reputation]
 
 NOTICIA:
 {t}
@@ -616,7 +619,7 @@ def analizar_noticia(url):
         prompt = f"""
         ROL
 Actúa como Analista Senior de PR/Reputación. Tu única tarea es determinar si la noticia
-es POSITIVA, NEGATIVA o NEUTRA respecto a la reputación de TikTok como empresa/plataforma.
+es POSITIVA, NEGATIVA o NEUTRA respecto a la reputación de la empresa/red social como empresa/plataforma.
 
 INSTRUCCIONES (leer atentamente)
 - Analiza SOLO el texto provisto.
