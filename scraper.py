@@ -642,7 +642,7 @@ NOTICIA:
         print(f"Error procesando {url}: {e}")
         return "NEUTRO"
 
-final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
+#final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
 
 # Ensure column order and presence (header keeps 'tag' and 'sentiment' if you want both)
 header = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
