@@ -261,20 +261,27 @@ def format_email_html(df, window_label, competencia_df=None):
                     for _, row in sort_news(block).iterrows():
                         body.append(render_card(row))
 
-    # --- Sección Competencia (misma card, sin agrupar por país) ---
+    # --- Sección Competencia ---
     if competencia_df is not None and not competencia_df.empty:
+    
         body.append(
-            "<div style='margin-top:40px; margin-bottom:10px;"
-            "font-family:Helvetica,sans-serif;"
-            "font-size:22px;"
-            "font-weight:700;"
-            "color:#222;'>"
-            "Competencia"
+            "<div style='width:70%;"
+            "margin:40px auto 30px auto;"
+            "background-color:#000000;"
+            "padding:10px 0;"
+            "text-align:center;'>"
+            "<span style='font-family:Arial, Helvetica, sans-serif;"
+            "font-size:42px;"
+            "font-weight:800;"
+            "letter-spacing:-0.5px;'>"
+            "<span style='color:#FFFFFF;'>Competencia</span>"
+            "</span>"
             "</div>"
         )
-        # ordenamos por fecha
+    
         for _, row in sort_news(competencia_df).iterrows():
             body.append(render_card(row))
+
 
     return "\n".join(body)
 def send_email(subject, body):
