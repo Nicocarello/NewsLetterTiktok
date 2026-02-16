@@ -261,9 +261,10 @@ def format_email_html(df, window_label, competencia_df=None):
                     for _, row in sort_news(block).iterrows():
                         body.append(render_card(row))
 
-    # --- Sección Competencia ---
+    # --- Sección Competencia (ordenada: Argentina, Chile, Perú, luego otros) ---
     if competencia_df is not None and not competencia_df.empty:
     
+        # Banner igual al del inicio, mostrando "Competencia"
         body.append(
             "<div style='width:70%;"
             "margin:40px auto 30px auto;"
@@ -274,15 +275,38 @@ def format_email_html(df, window_label, competencia_df=None):
             "font-size:42px;"
             "font-weight:800;"
             "letter-spacing:-0.5px;'>"
-            "<span style='color:#FFFFFF;'>TikTok</span>"
-            "<span style='color:#00F2EA;'> / </span>"
-            "<span style='color:#fe2c55;'>Competencia</span>"
+            "<span style='color:#FFFFFF;'>Competencia</span>"
             "</span>"
             "</div>"
         )
     
-        for _, row in sort_news(competencia_df).iterrows():
-            body.append(render_card(row))
+        # Asegurarnos de tener columna 'country' y normalizarla
+        competencia_df = competencia_df.copy()
+        if "country" not in competencia_df.columns:
+            competencia_df["country"] = ""
+        competencia_df["country_norm"] = competencia_df["country"].fillna("").astype(str).str.strip()
+    
+        # Orden fijo preferido
+        preferred_order = ["Argentina", "Chile", "Peru"]
+    
+        # Render por países en el orden preferido si existen
+        for c in preferred_order:
+            block = competencia_df[competencia_df["country_norm"].str.casefold() == c.casefold()]
+            if not block.empty:
+                for _, row in sort_news(block).iterrows():
+                    body.append(render_card(row))
+    
+        # Finalmente, renderizamos cualquier otro país que no esté en la lista preferida
+        other = competencia_df[~competencia_df["country_norm"]
+                               .str.casefold()
+                               .isin([p.casefold() for p in preferred_order])]
+        if not other.empty:
+            # (opcional) agrupar por country para mantener consistencia visual
+            for country, group_country in other.groupby("country_norm"):
+                # si querés un separador por país para los "otros", podés añadirlo aquí
+                for _, row in sort_news(group_country).iterrows():
+                    body.append(render_card(row))
+
 
 
     return "\n".join(body)
