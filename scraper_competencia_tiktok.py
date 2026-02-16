@@ -227,7 +227,10 @@ MAX_FETCH_WORKERS = int(os.getenv("MAX_FETCH_WORKERS", "3"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "15"))
 REQUEST_RETRIES = int(os.getenv("REQUEST_RETRIES", "2"))
 REQUEST_SLEEP_BETWEEN = float(os.getenv("REQUEST_SLEEP_BETWEEN", "0.2"))
-TIKTOK_PATTERN = re.compile(r"tik\s*-?\s*tok", flags=re.IGNORECASE)
+COMPETENCIA_PATTERN = re.compile(
+    r"\b(youtube|google|instagram|facebook|snapchat|twitter|twitch)\b",
+    flags=re.IGNORECASE
+)
 
 def load_cache(path):
     if os.path.exists(path):
@@ -314,8 +317,8 @@ final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_k
 # Filtro robusto (keep only rows mentioning TikTok)
 # ---------------------------
 mask = (
-    final_df.get('title', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
-    final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
+    final_df.get('title', '').astype(str).str.contains(COMPETENCIA_PATTERN, na=False) |
+    final_df.get('snippet', '').astype(str).str.contains(COMPETENCIA_PATTERN, na=False)
 )
 
 before_tot = len(final_df)
