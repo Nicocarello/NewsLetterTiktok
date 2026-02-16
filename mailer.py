@@ -326,8 +326,18 @@ if __name__ == "__main__":
         print(f"⚠️ No hay noticias en la ventana {window_label}.")
         raise SystemExit(0)
 
+    # 🔎 Filtrar solo noticias Tier 1
+    filtered = filtered[
+        filtered["tier"].fillna("").str.strip().str.upper() == "TIER 1"
+    ]
+
+    if filtered.empty:
+        print(f"⚠️ No hay noticias Tier 1 en la ventana {window_label}.")
+        raise SystemExit(0)
+
     body = format_email_html(filtered, window_label)
     subject = f"Newsletter TikTok ({window_label})"
 
     send_email(subject, body)
     print("✅ Email enviado correctamente.")
+
