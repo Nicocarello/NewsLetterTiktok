@@ -274,7 +274,9 @@ def format_email_html(df, window_label, competencia_df=None):
             "font-size:42px;"
             "font-weight:800;"
             "letter-spacing:-0.5px;'>"
-            "<span style='color:#FFFFFF;'>Competencia</span>"
+            "<span style='color:#FFFFFF;'>TikTok</span>"
+            "<span style='color:#00F2EA;'> / </span>"
+            "<span style='color:#fe2c55;'>Competencia</span>"
             "</span>"
             "</div>"
         )
@@ -336,9 +338,9 @@ if __name__ == "__main__":
     if not competencia_df.empty:
         competencia_filtered, _ = filter_by_window(competencia_df, now)
         # (opcional) si quisieras filtrar competencia por Tier 1 también:
-        # competencia_filtered = competencia_filtered[
-        #     competencia_filtered["tier"].fillna("").str.strip().str.upper().str.contains("TIER 1")
-        # ]
+        competencia_filtered = competencia_filtered[
+        competencia_filtered["tier"].fillna("").str.strip().str.upper().str.contains("TIER 1")
+        ]
 
     body = format_email_html(filtered, window_label, competencia_df=competencia_filtered)
     subject = f"Newsletter TikTok ({window_label})"
