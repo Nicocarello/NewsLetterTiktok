@@ -293,7 +293,7 @@ def format_email_html(df, window_label):
 def send_email(subject, body):
     """Envía el correo usando SMTP"""
     #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    recipients = ["nicolas.carello@publicalatam.com","sofia.szekasy@publicalatam.com"]
+    recipients = ["nicolas.carello@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
