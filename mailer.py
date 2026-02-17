@@ -249,20 +249,27 @@ def format_email_html(df, window_label, competencia_df=None):
     # Desired country order
     countries_order = ["Argentina", "Chile", "Peru"]
 
-    # --- New: iterate by country and render Institutional then Competencia per country ---
+    # --- Iterate by country and render Institutional then Competencia per country ---
     for country in countries_order:
         emoji = COUNTRY_EMOJIS.get(country, "")
         # --- Institutional section for this country (from 2026 sheet / df) ---
         inst_group = df[df.get("country") == country] if not df.empty else pd.DataFrame()
         if not inst_group.empty:
             body.append(
-                f"<div style='margin-top:30px; margin-bottom:8px;"
-                f"font-family:Helvetica,sans-serif;"
-                f"font-size:22px;"
-                f"font-weight:700;"
-                f"color:#fe2c55;'>"
-                f"TikTok / Institutional — {country} {emoji}"
-                f"</div>"
+                "<div style='width:70%;"
+                "margin:20px auto 10px auto;"
+                "background-color:#000000;"
+                "padding:10px 0;"
+                "text-align:center;'>"
+                "<span style='font-family:Arial, Helvetica, sans-serif;"
+                "font-size:36px;"
+                "font-weight:800;"
+                "letter-spacing:-0.5px;'>"
+                "<span style='color:#FFFFFF;'>TikTok</span>"
+                "<span style='color:#00F2EA;'> / </span>"
+                f"<span style='color:#fe2c55;'>Institutional — {country} {emoji}</span>"
+                "</span>"
+                "</div>"
             )
             # render known tags first
             known = inst_group[inst_group["tag_norm"].isin(orderTags)]
@@ -300,7 +307,7 @@ def format_email_html(df, window_label, competencia_df=None):
                 "letter-spacing:-0.5px;'>"
                 "<span style='color:#FFFFFF;'>TikTok</span>"
                 "<span style='color:#00F2EA;'> / </span>"
-                "<span style='color:#fe2c55;'>Competencia</span>"
+                f"<span style='color:#fe2c55;'>Competencia — {country} {emoji}</span>"
                 "</span>"
                 "</div>"
             )
@@ -309,6 +316,7 @@ def format_email_html(df, window_label, competencia_df=None):
                 body.append(render_card(row))
 
     return "\n".join(body)
+
 
 
 def send_email(subject, body):
