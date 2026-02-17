@@ -349,7 +349,7 @@ if __name__ == "__main__":
         raise SystemExit(0)
 
     # 🔎 Filter only TikTok mentions in title or snippet
-    #filtered = filter_tiktok_mentions(filtered)
+    filtered = filter_tiktok_mentions(filtered)
 
 
     # === Competencia ===
