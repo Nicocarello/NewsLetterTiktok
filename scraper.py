@@ -316,7 +316,7 @@ final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_k
 mask = (
     final_df.get('title', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
     final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
-    final_df.get('article_body', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
+    #final_df.get('article_body', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
 )
 before_tot = len(final_df)
 final_df = final_df[mask].copy()
