@@ -648,6 +648,7 @@ NOTICIA:
 header = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
 final_df = final_df.drop_duplicates(subset='link')
+final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
 # --- Read existing sheet and combine ---
 SHEET_RANGE = "2026!A:K"
