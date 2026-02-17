@@ -288,31 +288,27 @@ def format_email_html(df, window_label, competencia_df=None):
                     for _, row in sort_news(block).iterrows():
                         body.append(render_card(row))
 
-        # --- Competencia section for this country (if provided) ---
+        # --- SECCIÓN COMPETENCIA (Aquí aplicamos el límite de 3) ---
         comp_group = (
             competencia_df[competencia_df.get("country") == country]
             if (competencia_df is not None and not competencia_df.empty)
             else pd.DataFrame()
         )
+        
         if not comp_group.empty:
             body.append(
-                "<div style='width:70%;"
-                "margin:20px auto 10px auto;"
-                "background-color:#000000;"
-                "padding:10px 0;"
-                "text-align:center;'>"
-                "<span style='font-family:Arial, Helvetica, sans-serif;"
-                "font-size:36px;"
-                "font-weight:800;"
-                "letter-spacing:-0.5px;'>"
-                "<span style='color:#FFFFFF;'>TikTok</span>"
-                "<span style='color:#00F2EA;'> / </span>"
-                f"<span style='color:#fe2c55;'>Competencia — {country} {emoji}</span>"
-                "</span>"
-                "</div>"
+                f"<div style='width:70%;margin:20px auto 10px auto;background-color:#000000;"
+                f"padding:10px 0;text-align:center;'>"
+                f"<span style='font-family:Arial, Helvetica, sans-serif;font-size:36px;font-weight:800;letter-spacing:-0.5px;'>"
+                f"<span style='color:#FFFFFF;'>TikTok</span><span style='color:#00F2EA;'> / </span>"
+                f"<span style='color:#fe2c55;'>Competencia — {country} {emoji}</span></span></div>"
             )
-            # Render competencia rows for the country
-            for _, row in sort_news(comp_group).iterrows():
+            
+            # 1. Ordenamos las noticias por fecha (más recientes primero)
+            # 2. Limitamos a las primeras 3 usando .head(3)
+            comp_sorted_limited = sort_news(comp_group).head(3)
+            
+            for _, row in comp_sorted_limited.iterrows():
                 body.append(render_card(row))
 
     return "\n".join(body)
