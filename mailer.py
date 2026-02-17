@@ -359,6 +359,8 @@ if __name__ == "__main__":
 
     if filtered.empty:
         print(f"⚠️ No hay noticias Tier 1 en la ventana {window_label}.")
+        filtered["tier"].fillna("").str.strip().str.upper() == "TIER 2"
+        
         raise SystemExit(0)
 
     # 🔎 Filter only TikTok mentions in title or snippet
