@@ -166,7 +166,7 @@ def format_email_html(df, window_label, competencia_df=None):
             sort_key = sort_key.fillna(dfpart["scraped_at_dt"])
         return dfpart.assign(_k=sort_key).sort_values("_k", ascending=False)
 
-    # --- render_card (idéntica a la que ya tenías) ---
+    # render_card (idéntica a la que ya tenías)
     def render_card(row):
         title = ""
         snippet = ""
@@ -239,30 +239,34 @@ def format_email_html(df, window_label, competencia_df=None):
             f"</div>"
         )
 
-    # País
+    # País emojis
     COUNTRY_EMOJIS = {
         "Argentina": "🇦🇷",
         "Chile": "🇨🇱",
         "Peru": "🇵🇪"
     }
 
-    # --- Render de noticias por país (igual que antes) ---
-    if not df.empty:
-        for country, group_country in df.groupby("country"):
-            emoji = COUNTRY_EMOJIS.get(country, "")
+    # Desired country order
+    countries_order = ["Argentina", "Chile", "Peru"]
 
+    # --- New: iterate by country and render Institutional then Competencia per country ---
+    for country in countries_order:
+        emoji = COUNTRY_EMOJIS.get(country, "")
+        # --- Institutional section for this country (from 2026 sheet / df) ---
+        inst_group = df[df.get("country") == country] if not df.empty else pd.DataFrame()
+        if not inst_group.empty:
             body.append(
-                f"<div style='margin-top:30px; margin-bottom:15px;"
+                f"<div style='margin-top:30px; margin-bottom:8px;"
                 f"font-family:Helvetica,sans-serif;"
                 f"font-size:22px;"
                 f"font-weight:700;"
                 f"color:#fe2c55;'>"
-                f"{country} {emoji}"
+                f"TikTok / Institutional — {country} {emoji}"
                 f"</div>"
             )
-
-            known = group_country[group_country["tag_norm"].isin(orderTags)]
-            unknown = group_country[~group_country["tag_norm"].isin(orderTags)]
+            # render known tags first
+            known = inst_group[inst_group["tag_norm"].isin(orderTags)]
+            unknown = inst_group[~inst_group["tag_norm"].isin(orderTags)]
 
             for t in orderTags:
                 block = known[known["tag_norm"] == t]
@@ -277,31 +281,36 @@ def format_email_html(df, window_label, competencia_df=None):
                     for _, row in sort_news(block).iterrows():
                         body.append(render_card(row))
 
-    # --- Sección Competencia ---
-    if competencia_df is not None and not competencia_df.empty:
-    
-        body.append(
-            "<div style='width:70%;"
-            "margin:40px auto 30px auto;"
-            "background-color:#000000;"
-            "padding:10px 0;"
-            "text-align:center;'>"
-            "<span style='font-family:Arial, Helvetica, sans-serif;"
-            "font-size:42px;"
-            "font-weight:800;"
-            "letter-spacing:-0.5px;'>"
-            "<span style='color:#FFFFFF;'>TikTok</span>"
-            "<span style='color:#00F2EA;'> / </span>"
-            "<span style='color:#fe2c55;'>Competencia</span>"
-            "</span>"
-            "</div>"
+        # --- Competencia section for this country (if provided) ---
+        comp_group = (
+            competencia_df[competencia_df.get("country") == country]
+            if (competencia_df is not None and not competencia_df.empty)
+            else pd.DataFrame()
         )
-    
-        for _, row in sort_news(competencia_df).iterrows():
-            body.append(render_card(row))
-
+        if not comp_group.empty:
+            body.append(
+                "<div style='width:70%;"
+                "margin:20px auto 10px auto;"
+                "background-color:#000000;"
+                "padding:10px 0;"
+                "text-align:center;'>"
+                "<span style='font-family:Arial, Helvetica, sans-serif;"
+                "font-size:36px;"
+                "font-weight:800;"
+                "letter-spacing:-0.5px;'>"
+                "<span style='color:#FFFFFF;'>TikTok</span>"
+                "<span style='color:#00F2EA;'> / </span>"
+                "<span style='color:#fe2c55;'>Competencia</span>"
+                "</span>"
+                "</div>"
+            )
+            # Render competencia rows for the country
+            for _, row in sort_news(comp_group).iterrows():
+                body.append(render_card(row))
 
     return "\n".join(body)
+
+
 def send_email(subject, body):
     """Envía el correo usando SMTP"""
     #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
