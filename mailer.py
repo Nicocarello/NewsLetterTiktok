@@ -352,19 +352,21 @@ if __name__ == "__main__":
         print(f"⚠️ No hay noticias en la ventana {window_label}.")
         raise SystemExit(0)
 
-    # 🔎 Filtrar solo noticias Tier 1 (como ya lo tenías)
-    filtered = filtered[
-        filtered["tier"].fillna("").str.strip().str.upper() == "TIER 1"
-    ]
-
-    if filtered.empty:
-        print(f"⚠️ No hay noticias Tier 1 en la ventana {window_label}.")
-        filtered["tier"].fillna("").str.strip().str.upper() == "TIER 2"
-        
-        raise SystemExit(0)
-
-    # 🔎 Filter only TikTok mentions in title or snippet
-    filtered = filter_tiktok_mentions(filtered)
+    # 🔎 Filtrar noticias: preferir Tier 1; si no hay, usar Tier 2
+    tier_clean = filtered["tier"].fillna("").str.strip().str.upper()
+    
+    tier1 = filtered[tier_clean == "TIER 1"]
+    
+    if not tier1.empty:
+        filtered = tier1
+    else:
+        tier2 = filtered[tier_clean == "TIER 2"]
+        if not tier2.empty:
+            print(f"ℹ️ No hay Tier 1 en la ventana {window_label}. Se enviarán Tier 2.")
+            filtered = tier2
+        else:
+            print(f"⚠️ No hay noticias Tier 1 ni Tier 2 en la ventana {window_label}.")
+            raise SystemExit(0)
 
 
     # === Competencia ===
