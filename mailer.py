@@ -93,6 +93,22 @@ def filter_by_window(df, now):
 #    "Peru": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/PERU.png"
 #}
 
+def filter_tiktok_mentions(df):
+    """
+    Keep only rows where title (D) or snippet (H)
+    contains 'tiktok' or its variations.
+    """
+    pattern = r"\btik[\s\-]?tok\w*\b"
+
+    title_col = "D" if "D" in df.columns else "title"
+    snippet_col = "H" if "H" in df.columns else "snippet"
+
+    title_match = df[title_col].fillna("").str.contains(pattern, case=False, regex=True)
+    snippet_match = df[snippet_col].fillna("").str.contains(pattern, case=False, regex=True)
+
+    return df[title_match | snippet_match]
+
+
 
 def clean_value(val):
     """Limpia valores nulos o placeholders."""
@@ -288,8 +304,8 @@ def format_email_html(df, window_label, competencia_df=None):
     return "\n".join(body)
 def send_email(subject, body):
     """Envía el correo usando SMTP"""
-    recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    #recipients = ["nicolas.carello@publicalatam.com"]
+    #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
+    recipients = ["nicolas.carello@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
@@ -331,6 +347,10 @@ if __name__ == "__main__":
     if filtered.empty:
         print(f"⚠️ No hay noticias Tier 1 en la ventana {window_label}.")
         raise SystemExit(0)
+
+    # 🔎 Filter only TikTok mentions in title or snippet
+    filtered = filter_tiktok_mentions(filtered)
+
 
     # === Competencia ===
     competencia_df = get_competencia_data()
