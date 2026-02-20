@@ -29,7 +29,7 @@ TZ_ARG = pytz.timezone("America/Argentina/Buenos_Aires")
 
 # === Funciones ===
 def get_sheet_data():
-    """Descarga los datos de la hoja de Google Sheets"""
+    """Descarga los datos de la hoja de Google Sheets (normaliza filas ragged)."""
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
         range="2026!A:M"
@@ -38,10 +38,18 @@ def get_sheet_data():
     if not values:
         return pd.DataFrame()
     header = values[0]
-    return pd.DataFrame(values[1:], columns=header)
+    rows = values[1:]
+
+    n_cols = len(header)
+    normalized = [
+        (row + [""] * n_cols)[:n_cols] if len(row) < n_cols else row[:n_cols]
+        for row in rows
+    ]
+
+    return pd.DataFrame(normalized, columns=header)
 
 def get_competencia_data():
-    """Descarga los datos de la hoja 'Competencia'"""
+    """Descarga los datos de la hoja 'Competencia' (normaliza filas ragged)."""
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
         range="Competencia!A:L"
@@ -50,7 +58,15 @@ def get_competencia_data():
     if not values:
         return pd.DataFrame()
     header = values[0]
-    return pd.DataFrame(values[1:], columns=header)
+    rows = values[1:]
+
+    n_cols = len(header)
+    normalized = [
+        (row + [""] * n_cols)[:n_cols] if len(row) < n_cols else row[:n_cols]
+        for row in rows
+    ]
+
+    return pd.DataFrame(normalized, columns=header)
 
 
 def is_si_mask(series):
