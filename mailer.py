@@ -356,7 +356,7 @@ if __name__ == "__main__":
     # 🔎 Filtrar por columna enviar = 'si'
     if "enviar" in filtered.columns:
         filtered = filtered[
-            filtered["enviar"].str.lower() == "si"
+            filtered["enviar"].fillna("").str.strip().str.lower() == "si"
         ]
     
     if filtered.empty:
