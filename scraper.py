@@ -63,7 +63,7 @@ except Exception:
     logging.warning("MAX_ITEMS no es int válido; usando 500.")
     MAX_ITEMS = 500
 
-TIME_PERIOD = os.getenv("TIME_PERIOD", "last_hour")
+TIME_PERIOD = os.getenv("TIME_PERIOD", "last_day")
 TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
 
 # Concurrency tunables (env)
