@@ -342,16 +342,19 @@ def format_email_html(df, window_label, competencia_df=None):
             comp_sorted_limited = sort_news(comp_group).head(3)
             
             for _, row in comp_sorted_limited.iterrows():
-                body.append(render_card(row))
-
-    return "\n".join(body)
+                row_no_tag = row.copy()
+                if "tag" in row_no_tag.index:
+                    row_no_tag["tag"] = ""
+                body.append(render_card(row_no_tag))
+            
+                return "\n".join(body)
 
 
 
 def send_email(subject, body):
     """Envía el correo usando SMTP"""
-    recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    #recipients = ["nicolas.carello@publicalatam.com"]
+    #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
+    recipients = ["nicolas.carello@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
