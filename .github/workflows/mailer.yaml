@@ -1,33 +1,33 @@
-name: Send News Emails
+# name: Send News Emails
 
-on:
-  schedule:
-    # GitHub Actions corre en UTC. 12:00 UTC = 09:00 Buenos Aires (UTC−3)
-    # Solo lunes (1) a viernes (5)
-    - cron: "0 12 * * 1-5"
-  workflow_dispatch:
+# on:
+#   schedule:
+#     # GitHub Actions corre en UTC. 12:00 UTC = 09:00 Buenos Aires (UTC−3)
+#     # Solo lunes (1) a viernes (5)
+#     - cron: "0 12 * * 1-5"
+#   workflow_dispatch:
 
-jobs:
-  mailer:
-    runs-on: ubuntu-latest
-    env:
-      TZ: America/Argentina/Buenos_Aires  # para que los logs muestren hora local
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+# jobs:
+#   mailer:
+#     runs-on: ubuntu-latest
+#     env:
+#       TZ: America/Argentina/Buenos_Aires  # para que los logs muestren hora local
+#     steps:
+#       - name: Checkout repo
+#         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+#       - name: Install dependencies
+#         run: pip install -r requirements.txt
 
-      - name: Run mailer
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
-        run: python mailer.py
+#       - name: Run mailer
+#         env:
+#           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+#           EMAIL_USER: ${{ secrets.EMAIL_USER }}
+#           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+#           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+#         run: python mailer.py
