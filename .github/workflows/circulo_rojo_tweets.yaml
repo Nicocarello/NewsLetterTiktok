@@ -24,4 +24,5 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          HISTORICAL_SINCE: ${{ secrets.HISTORICAL_SINCE }}
         run: python circulo_rojo_tweets.py
