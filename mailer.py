@@ -1,6 +1,7 @@
 import os
 import json
 import pandas as pd
+import unicodedata
 from datetime import datetime, timedelta
 import pytz
 from googleapiclient.discovery import build
@@ -43,13 +44,29 @@ def get_competencia_data():
     """Descarga los datos de la hoja 'Competencia'"""
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range="Competencia!A:K"
+        range="Competencia!A:L"
     ).execute()
     values = result.get("values", [])
     if not values:
         return pd.DataFrame()
     header = values[0]
     return pd.DataFrame(values[1:], columns=header)
+
+
+def is_si_mask(series):
+    """
+    Devuelve una máscara booleana True cuando la celda equivale a 'si' o 'sí'
+    (acepta mayúsculas/minúsculas y espacios).
+    """
+    # aseguramos trabajar sobre strings y quitamos NaNs
+    s = series.fillna("").astype(str).str.strip().str.lower()
+
+    # normalizar acentos (convierte 'sí' -> 'si')
+    def _normalize(text):
+        nfkd = unicodedata.normalize("NFKD", text)
+        return "".join([c for c in nfkd if not unicodedata.combining(c)])
+
+    return s.apply(_normalize) == "si"
 
 
 def sentiment_badge(label: str) -> str:
@@ -333,7 +350,7 @@ def send_email(subject, body):
         server.sendmail(EMAIL_USER, recipients, msg.as_string())
         
 
-# === Ejecución ===
+# EJECUCION
 if __name__ == "__main__":
     now = datetime.now(TZ_ARG)
 
@@ -342,33 +359,32 @@ if __name__ == "__main__":
         print("ℹ️ Fin de semana: no se envía newsletter.")
         raise SystemExit(0)
 
+    # === Datos institucionales (hoja 2026) ===
     df = get_sheet_data()
     if df.empty:
         print("⚠️ No hay datos en la hoja.")
         raise SystemExit(0)
 
     filtered, window_label = filter_by_window(df, now)
-
     if filtered.empty:
         print(f"⚠️ No hay noticias en la ventana {window_label}.")
         raise SystemExit(0)
-    
-    # 🔎 Filtrar por columna enviar = 'si'
+
+    # 🔎 Filtrar solo noticias marcadas para enviar (columna 'enviar' = 'si')
     if "enviar" in filtered.columns:
-        filtered = filtered[
-            filtered["enviar"].fillna("").str.strip().str.lower() == "si"
-        ]
-    
+        filtered = filtered[is_si_mask(filtered["enviar"])]
+
     if filtered.empty:
         print(f"⚠️ No hay noticias marcadas para enviar en la ventana {window_label}.")
         raise SystemExit(0)
 
-    
-    # 🔎 Filtrar noticias: preferir Tier 1; si no hay, usar Tier 2
+    # ==============================
+    # 🔕 FILTROS POR TIER DESACTIVADOS
+    # ==============================
+    #
     # tier_clean = filtered["tier"].fillna("").str.strip().str.upper()
-    
     # tier1 = filtered[tier_clean == "TIER 1"]
-    
+    #
     # if not tier1.empty:
     #     filtered = tier1
     # else:
@@ -380,17 +396,32 @@ if __name__ == "__main__":
     #         print(f"⚠️ No hay noticias Tier 1 ni Tier 2 en la ventana {window_label}.")
     #         raise SystemExit(0)
 
-
     # === Competencia ===
     competencia_df = get_competencia_data()
     competencia_filtered = pd.DataFrame()
+
     if not competencia_df.empty:
         competencia_filtered, _ = filter_by_window(competencia_df, now)
-        # (opcional) si quisieras filtrar competencia por Tier 1 también:
-        competencia_filtered = competencia_filtered[
-        competencia_filtered["tier"].fillna("").str.strip().str.upper().str.contains("TIER 1")
-        ]
 
+        # Filtrar solo competencia marcada para enviar
+        if "enviar" in competencia_filtered.columns:
+            competencia_filtered = competencia_filtered[
+                is_si_mask(competencia_filtered["enviar"])
+            ]
+
+        # ==============================
+        # 🔕 FILTRO TIER 1 COMPETENCIA DESACTIVADO
+        # ==============================
+        #
+        # competencia_filtered = competencia_filtered[
+        #     competencia_filtered["tier"]
+        #     .fillna("")
+        #     .str.strip()
+        #     .str.upper()
+        #     .str.contains("TIER 1")
+        # ]
+
+    # === Generar y enviar email ===
     body = format_email_html(filtered, window_label, competencia_df=competencia_filtered)
     subject = f"Newsletter TikTok ({window_label})"
 
