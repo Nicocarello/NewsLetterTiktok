@@ -651,7 +651,7 @@ final_df = final_df.drop_duplicates(subset='link')
 final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
 # --- Read existing sheet and combine ---
-SHEET_RANGE = "2026!A:L"
+SHEET_RANGE = "2026!A:k"
 try:
     result = sheet_service.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
     values = result.get("values", [])
