@@ -31,7 +31,7 @@ def get_sheet_data():
     """Descarga los datos de la hoja de Google Sheets"""
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range="2026!A:L"
+        range="2026!A:M"
     ).execute()
     values = result.get("values", [])
     if not values:
@@ -348,25 +348,37 @@ if __name__ == "__main__":
         raise SystemExit(0)
 
     filtered, window_label = filter_by_window(df, now)
+
     if filtered.empty:
         print(f"⚠️ No hay noticias en la ventana {window_label}.")
         raise SystemExit(0)
+    
+    # 🔎 Filtrar por columna enviar = 'si'
+    if "enviar" in filtered.columns:
+        filtered = filtered[
+            filtered["enviar"].fillna("").str.strip().str.lower() == "si"
+        ]
+    
+    if filtered.empty:
+        print(f"⚠️ No hay noticias marcadas para enviar en la ventana {window_label}.")
+        raise SystemExit(0)
 
+    
     # 🔎 Filtrar noticias: preferir Tier 1; si no hay, usar Tier 2
-    tier_clean = filtered["tier"].fillna("").str.strip().str.upper()
+    # tier_clean = filtered["tier"].fillna("").str.strip().str.upper()
     
-    tier1 = filtered[tier_clean == "TIER 1"]
+    # tier1 = filtered[tier_clean == "TIER 1"]
     
-    if not tier1.empty:
-        filtered = tier1
-    else:
-        tier2 = filtered[tier_clean == "TIER 2"]
-        if not tier2.empty:
-            print(f"ℹ️ No hay Tier 1 en la ventana {window_label}. Se enviarán Tier 2.")
-            filtered = tier2
-        else:
-            print(f"⚠️ No hay noticias Tier 1 ni Tier 2 en la ventana {window_label}.")
-            raise SystemExit(0)
+    # if not tier1.empty:
+    #     filtered = tier1
+    # else:
+    #     tier2 = filtered[tier_clean == "TIER 2"]
+    #     if not tier2.empty:
+    #         print(f"ℹ️ No hay Tier 1 en la ventana {window_label}. Se enviarán Tier 2.")
+    #         filtered = tier2
+    #     else:
+    #         print(f"⚠️ No hay noticias Tier 1 ni Tier 2 en la ventana {window_label}.")
+    #         raise SystemExit(0)
 
 
     # === Competencia ===
