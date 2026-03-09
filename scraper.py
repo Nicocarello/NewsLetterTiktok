@@ -650,8 +650,11 @@ final_df = final_df.reindex(columns=header, fill_value='')
 final_df = final_df.drop_duplicates(subset='link')
 final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
-# --- Read existing sheet and combine ---
-SHEET_RANGE = "2026!A:k"
+# --- Read existing sheet and combine (incremental append instead of full rewrite) ---
+SHEET_RANGE = "2026!A:K"
+HEADER = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
+
+# 1) Read current sheet values (if any)
 try:
     result = sheet_service.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
     values = result.get("values", [])
@@ -663,93 +666,166 @@ except Exception as e:
     logging.exception("Failed to read existing sheet: %s", e)
     values = []
 
-if values:
+# 2) Build set of existing links from the sheet to avoid duplicate appends
+existing_links_set = set()
+sheet_has_header = False
+if values and len(values) >= 1:
+    # assume first row is header if it matches at least some of our header names
+    header_row = values[0]
+    # find link index robustly
+    link_idx = None
     try:
-        existing_df = pd.DataFrame(values[1:], columns=values[0]).reindex(columns=header, fill_value='')
-    except Exception as e:
-        logging.exception("Error parsing existing sheet values into DataFrame: %s", e)
-        existing_df = pd.DataFrame(columns=header)
-else:
-    existing_df = pd.DataFrame(columns=header)
+        link_idx = header_row.index('link')
+        sheet_has_header = True
+    except ValueError:
+        # try case-insensitive match
+        row_lower = [c.lower() for c in header_row]
+        if 'link' in row_lower:
+            link_idx = row_lower.index('link')
+            sheet_has_header = True
+        else:
+            # fallback: if header length matches our HEADER, assume it's our header
+            if len(header_row) == len(HEADER):
+                # assume the header order matches
+                try:
+                    link_idx = HEADER.index('link')
+                    sheet_has_header = True
+                except Exception:
+                    link_idx = None
 
-combined_df = pd.concat([existing_df, final_df], ignore_index=True)
-if 'link' in combined_df.columns:
-    combined_df.drop_duplicates(subset=["link"], inplace=True)
-combined_df = combined_df.reset_index(drop=True)
+    if link_idx is not None:
+        for r in values[1:]:
+            try:
+                if len(r) > link_idx:
+                    v = r[link_idx].strip()
+                    if v:
+                        existing_links_set.add(v)
+            except Exception:
+                continue
 
-# --- SANITIZE data before writing to Sheets ---
-combined_df = combined_df.replace([np.nan, pd.NaT, None], '').replace([np.inf, -np.inf], '')
+# If sheet was empty (no values) we will write header first
+sheet_empty = len(values) == 0
 
-def sanitize_cell(cell):
-    if isinstance(cell, (np.integer,)):
-        return int(cell)
-    if isinstance(cell, (np.floating,)):
-        fv = float(cell)
-        if math.isnan(fv) or math.isinf(fv):
-            return ''
-        return fv
-    if isinstance(cell, (np.bool_, bool)):
-        return bool(cell)
-    try:
-        import pandas as _pd
-        if isinstance(cell, _pd.Timestamp):
-            if pd.isna(cell):
-                return ''
-            return cell.isoformat()
-    except Exception:
-        pass
-    s = '' if cell is None else str(cell)
-    if s.lower() in ('nan', 'nat', 'none'):
-        return ''
-    return s
+# 3) Ensure final_df has correct columns and sanitized values (you already prepared final_df above)
+# Re-use your sanitization logic to produce the rows to append (but only for new links)
 
-values_rows = []
-for row in combined_df[header].values.tolist():
-    sanitized_row = [sanitize_cell(cell) for cell in row]
-    values_rows.append([str(cell) for cell in sanitized_row])
+# Ensure final_df contains header columns
+for col in HEADER:
+    if col not in final_df.columns:
+        final_df[col] = ''
 
-body_values = [header] + values_rows
+# drop duplicates by link/title/snippet as you already did
+final_df = final_df.replace([np.nan, pd.NaT, None], '').replace([np.inf, -np.inf], '')
 
-def is_json_serializable(obj):
-    try:
-        json.dumps(obj)
-        return True
-    except Exception:
-        return False
+# Build list of candidate rows (in correct order), and filter out ones with link already in sheet
+rows_to_add = []
+new_links_count = 0
+for row in final_df[HEADER].values.tolist():
+    # row is list ordered as HEADER
+    # sanitize each cell similarly to your sanitize_cell
+    sanitized_row = []
+    # create a dict-like mapping for convenience
+    row_map = dict(zip(HEADER, row))
+    link = str(row_map.get('link', '')).strip()
+    # Skip if link missing
+    if not link:
+        continue
+    if link in existing_links_set:
+        continue
+    # Sanitize each cell (reuse your sanitize_cell behavior)
+    sanitized_cells = []
+    for cell in row:
+        # simple sanitize: convert to str, guard special pandas types
+        if isinstance(cell, (np.integer,)):
+            val = int(cell)
+        elif isinstance(cell, (np.floating,)):
+            fv = float(cell)
+            if math.isnan(fv) or math.isinf(fv):
+                val = ''
+            else:
+                val = fv
+        elif isinstance(cell, (np.bool_, bool)):
+            val = bool(cell)
+        else:
+            try:
+                import pandas as _pd
+                if isinstance(cell, _pd.Timestamp):
+                    if pd.isna(cell):
+                        val = ''
+                    else:
+                        val = cell.isoformat()
+                else:
+                    val = '' if cell is None else str(cell)
+            except Exception:
+                val = '' if cell is None else str(cell)
+        if isinstance(val, str) and val.lower() in ('nan', 'nat', 'none'):
+            val = ''
+        sanitized_cells.append(val)
+    rows_to_add.append([str(c) for c in sanitized_cells])
+    existing_links_set.add(link)
+    new_links_count += 1
 
-bad_cells = []
-for r_idx, row in enumerate(body_values):
-    for c_idx, cell in enumerate(row):
-        if not is_json_serializable(cell):
-            bad_cells.append((r_idx, c_idx, type(cell).__name__, repr(cell)))
-if bad_cells:
-    logging.warning("Found unserializable cells (row_index, col_index, type, repr). Showing up to 20 entries:")
-    for entry in bad_cells[:20]:
-        logging.warning(entry)
+if new_links_count == 0 and not sheet_empty:
+    logging.info("No hay filas nuevas para agregar. Saliendo sin tocar la hoja.")
+    logging.info("Script finished correctamente.")
+    sys.exit(0)
 
-# --- Write to sheet with diagnostics on HttpError ---
-try:
-    logging.info("Clearing target range %s ...", SHEET_RANGE)
-    sheet_service.values().clear(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
-    logging.info("Updating sheet con %d filas (incl header)...", len(body_values))
-    sheet_service.values().update(
+# 4) Prepare batches and append with retries/backoff
+BATCH_SIZE = int(os.getenv("SHEET_BATCH_SIZE", "500"))  # ajustable
+def sheets_append_batch(values_batch):
+    body = {"values": values_batch}
+    return sheet_service.values().append(
         spreadsheetId=SPREADSHEET_ID,
         range="2026!A1",
         valueInputOption="RAW",
-        body={"values": body_values}
+        insertDataOption="INSERT_ROWS",
+        body=body
     ).execute()
-    logging.info("✅ Hoja actualizada sin duplicados. Filas escritas: %d", len(body_values)-1)
-except HttpError as e:
-    logging.exception("HttpError escribiendo en Sheets: %s", e)
-    sample_preview = {
-        "first_rows": body_values[:5],
-        "rows_count": len(body_values),
-        "bad_cells_count": len(bad_cells),
-    }
-    logging.error("Payload preview (first 5 rows): %s", json.dumps(sample_preview, ensure_ascii=False, indent=2))
-    raise
-except Exception as e:
-    logging.exception("Unexpected error writing to Sheets: %s", e)
-    raise
 
+def append_with_retry(batch, max_attempts=5, base_delay=1.5):
+    attempt = 0
+    while True:
+        try:
+            return sheets_append_batch(batch)
+        except HttpError as e:
+            attempt += 1
+            if attempt >= max_attempts:
+                logging.exception("Failed to append batch to Sheets after %d attempts: %s", attempt, e)
+                raise
+            # exponential backoff with jitter
+            sleep_for = min(60, base_delay * (2 ** (attempt - 1))) + random.random() * 0.5
+            logging.warning("HttpError appending to Sheets (attempt %d/%d): %s — retrying in %.1fs", attempt, max_attempts, e, sleep_for)
+            time.sleep(sleep_for)
+        except Exception as e:
+            attempt += 1
+            if attempt >= max_attempts:
+                logging.exception("Failed to append batch to Sheets after %d attempts: %s", attempt, e)
+                raise
+            sleep_for = min(60, base_delay * (2 ** (attempt - 1))) + random.random() * 0.5
+            logging.warning("Error appending to Sheets (attempt %d/%d): %s — retrying in %.1fs", attempt, max_attempts, e, sleep_for)
+            time.sleep(sleep_for)
+
+# if sheet empty, write header first (one-time)
+if sheet_empty:
+    logging.info("Hoja vacía: escribiendo header primero.")
+    try:
+        append_with_retry([HEADER])
+    except Exception as e:
+        logging.exception("No se pudo escribir el header en la sheet: %s", e)
+        raise
+
+# Append in batches
+total_added = 0
+for i in range(0, len(rows_to_add), BATCH_SIZE):
+    batch = rows_to_add[i:i + BATCH_SIZE]
+    try:
+        append_with_retry(batch)
+        total_added += len(batch)
+        logging.info("Appended batch %d..%d (rows=%d) to sheet.", i, i+len(batch)-1, len(batch))
+    except Exception as e:
+        logging.exception("Failed appending batch starting at %d: %s", i, e)
+        # continue attempting next batches (or you may prefer to abort)
+        continue
+
+logging.info("✅ Sheet updated. New rows appended: %d", total_added)
 logging.info("Script finished correctamente.")
