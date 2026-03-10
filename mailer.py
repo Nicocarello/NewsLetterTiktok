@@ -90,6 +90,8 @@ def sentiment_badge(label: str) -> str:
     color = "#9e9e9e"  # neutro default
     if lab == "POSITIVO":
         color = "#2e7d32"  # verde
+    elif lab == "POSITIVO (PROACTIVO):
+        color = "#2e7d32"  # verde
     elif lab == "NEGATIVO":
         color = "#c62828"  # rojo
     elif lab == "NEUTRO":
