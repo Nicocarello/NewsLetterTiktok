@@ -19,6 +19,10 @@ import random
 import re
 import sys
 import math
+import threading
+import tempfile
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
@@ -57,10 +61,10 @@ QUERIES = [q.strip() for q in os.getenv(
 try:
     MAX_ITEMS = int(os.getenv("MAX_ITEMS", "500"))
     if MAX_ITEMS <= 0:
-        logging.warning("MAX_ITEMS <= 0; usando 500.")
+        logging.warning("MAX_ITEMS <= 0; using 500.")
         MAX_ITEMS = 500
 except Exception:
-    logging.warning("MAX_ITEMS no es int válido; usando 500.")
+    logging.warning("MAX_ITEMS is not a valid int; using 500.")
     MAX_ITEMS = 500
 
 TIME_PERIOD = os.getenv("TIME_PERIOD", "last_hour")
@@ -70,16 +74,41 @@ TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
 MAX_CONCURRENT_ACTORS = int(os.getenv("MAX_CONCURRENT_ACTORS", "4"))
 MAX_CONCURRENT_DATASET_FETCH = int(os.getenv("MAX_CONCURRENT_DATASET_FETCH", "6"))
 
+# LLM concurrency guard (code-default; can be overridden via env if needed)
+LLM_MAX_CONCURRENT = int(os.getenv("LLM_MAX_CONCURRENT", "2"))
+
 # --- Google Sheets client ---
+# Defensive loading of service account info from env (avoid logging full JSON)
 try:
-    creds = service_account.Credentials.from_service_account_info(json.loads(GOOGLE_CREDENTIALS_ENV), scopes=SCOPES)
+    sa_info = json.loads(GOOGLE_CREDENTIALS_ENV)
+    creds = service_account.Credentials.from_service_account_info(sa_info, scopes=SCOPES)
     sheet_service = build('sheets', 'v4', credentials=creds).spreadsheets()
 except Exception as e:
-    logging.exception("Failed loading Google credentials: %s", e)
+    logging.exception("Failed loading Google credentials (sanitized). Exiting.")
     sys.exit(1)
 
 # --- Apify client ---
 apify_client = ApifyClient(APIFY_TOKEN)
+
+# --- Thread-safety primitives and utilities ---
+article_cache_lock = threading.Lock()
+tag_cache_lock = threading.Lock()
+llm_semaphore = threading.Semaphore(LLM_MAX_CONCURRENT)
+
+def atomic_write_json(path, data):
+    # Write to temp and replace atomically
+    dirpath = os.path.dirname(path) or '.'
+    try:
+        with tempfile.NamedTemporaryFile('w', dir=dirpath, delete=False, encoding='utf-8') as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+            tempname = fh.name
+        os.replace(tempname, path)
+        try:
+            os.chmod(path, 0o600)
+        except Exception:
+            pass
+    except Exception as e:
+        logging.warning("atomic_write_json failed for %s: %s", path, e)
 
 # --- Helpers: backoff retry (reusable) ---
 def retry(fn, max_attempts=5, base_delay=1.5, max_delay=60, jitter=0.4, *args, **kwargs):
@@ -138,19 +167,19 @@ for query in QUERIES:
         }
         tasks.append({"query": query, "country": country, "run_input": run_input})
 
-logging.info("Lanzando %d ejecuciones de actor (concurrency=%d)...", len(tasks), MAX_CONCURRENT_ACTORS)
+logging.info("Launching %d actor runs (concurrency=%d)...", len(tasks), MAX_CONCURRENT_ACTORS)
 
 def run_actor_task(task):
     query = task["query"]
     country = task["country"]
     run_input = task["run_input"]
     try:
-        logging.info("Ejecutando actor %s para %s con query '%s'...", ACTOR_ID, country, query)
+        logging.info("Executing actor %s for %s with query '%s'...", ACTOR_ID, country, query)
         run = retry(lambda: apify_client.actor(ACTOR_ID).call(run_input=run_input), max_attempts=4)
         dataset_id = run.get("defaultDatasetId")
         return {"query": query, "country": country, "run": run, "dataset_id": dataset_id, "error": None}
     except Exception as e:
-        logging.exception("Error al ejecutar actor para %s con query '%s': %s", country, query, e)
+        logging.exception("Error running actor for %s with query '%s'.", country, query)
         return {"query": query, "country": country, "run": None, "dataset_id": None, "error": str(e)}
 
 actor_results = []
@@ -159,14 +188,15 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACTORS) as ex:
     for fut in as_completed(futures):
         res = fut.result()
         if res["error"]:
-            logging.warning("Run falló para %s - %s: %s", res["country"], res["query"], res["error"])
+            logging.warning("Run failed for %s - %s: %s", res["country"], res["query"], res["error"])
             continue
         if not res["dataset_id"]:
-            logging.warning("No dataset generado para %s - %s (run: %s)", res["country"], res["query"], str(res["run"])[:200])
+            # Log only limited part of run to avoid leaking secrets
+            logging.warning("No dataset generated for %s - %s", res["country"], res["query"])
             continue
         actor_results.append(res)
 
-logging.info("Ejecuciones completadas: %d exitosas / %d totales", len(actor_results), len(tasks))
+logging.info("Actor executions completed: %d successful / %d total", len(actor_results), len(tasks))
 
 # --- Descarga datasets en paralelo ---
 def fetch_dataset_items(entry):
@@ -176,7 +206,7 @@ def fetch_dataset_items(entry):
     try:
         items = retry(lambda: apify_client.dataset(dataset_id).list_items().items, max_attempts=4)
         if not items:
-            logging.info("No items para dataset %s (%s - %s)", dataset_id, country, query)
+            logging.info("No items for dataset %s (%s - %s)", dataset_id, country, query)
             return None
         df = pd.DataFrame(items)
         df["country"] = country
@@ -184,7 +214,7 @@ def fetch_dataset_items(entry):
         df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
         return df
     except Exception as e:
-        logging.exception("Error listando items del dataset %s: %s", dataset_id, e)
+        logging.exception("Error listing items for dataset %s.", dataset_id)
         return None
 
 all_dfs = []
@@ -196,7 +226,7 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_DATASET_FETCH) as ex:
             all_dfs.append(df)
 
 if not all_dfs:
-    logging.error("No se obtuvieron resultados de ningún país. Saliendo sin actualizar hoja.")
+    logging.error("No results obtained from any country. Exiting without updating sheet.")
     sys.exit(0)
 
 # --- Build final dataframe and normalize columns ---
@@ -233,24 +263,26 @@ def load_cache(path):
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as fh:
-                return json.load(fh)
+                return json.load(fh) or {}
         except Exception:
             return {}
     return {}
 
-
 def save_cache(path, data):
     try:
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
+        atomic_write_json(path, data)
     except Exception as e:
-        logging.warning("No se pudo guardar cache en %s: %s", path, e)
+        logging.warning("Could not save cache to %s: %s", path, e)
 
 article_cache = load_cache(CACHE_PATH)
 
 def url_key(u): return u.strip() if u else ''
 
+# Configure session with adapter and moderate pool sizes
 session = requests.Session()
+adapter = HTTPAdapter(pool_connections=20, pool_maxsize=50)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
 session.headers.update({
     "User-Agent": os.getenv("FETCH_USER_AGENT", "Mozilla/5.0 (compatible; PublicBot/1.0; +https://publicalatam.com)"),
     "Accept-Language": "es-ES,es;q=0.9,en;q=0.8"
@@ -262,7 +294,7 @@ def fetch_html_with_retries(url):
             resp = session.get(url, timeout=REQUEST_TIMEOUT)
             if resp.status_code == 200 and resp.text:
                 return resp.text
-            logging.debug("fetch_html: %s returned status %d", url, resp.status_code)
+            logging.debug("fetch_html: %s returned status %d", url, getattr(resp, "status_code", None))
         except requests.RequestException as e:
             logging.debug("fetch_html attempt %d for %s failed: %s", attempt+1, url, e)
         time.sleep(0.5 + REQUEST_SLEEP_BETWEEN * attempt)
@@ -282,11 +314,14 @@ def fetch_and_parse(url):
     k = url_key(url)
     if not k:
         return k, ''
-    if k in article_cache:
-        return k, article_cache[k]
+    with article_cache_lock:
+        if k in article_cache:
+            return k, article_cache[k]
     html = fetch_html_with_retries(url)
     body = extract_body_from_html(url, html) if html else ''
-    article_cache[k] = body
+    with article_cache_lock:
+        article_cache[k] = body
+    # small polite sleep
     time.sleep(REQUEST_SLEEP_BETWEEN)
     return k, body
 
@@ -324,10 +359,9 @@ after_tot = len(final_df)
 logging.info("After body verification filter: %d -> %d rows (removed %d)", before_tot, after_tot, before_tot - after_tot)
 
 # ---------------------------
-# CATEGORIZACIÓN POST-FILTER (devuelve una de las etiquetas y la guarda en 'tag')
+# CATEGORIZACIÓN POST-FILTER
 # ---------------------------
 
-# Canonical categories (exact output strings expected in the sheet)
 CANONICAL_CATEGORIES = [
     "Consumer & Brand",
     "Music",
@@ -339,7 +373,6 @@ CANONICAL_CATEGORIES = [
     "Corporate Reputation",
 ]
 
-# Normalization map: posibles tokens/respuestas del modelo -> categoría canónica
 NORMALIZATION_MAP = {
     "CONSUMER & BRAND": "Consumer & Brand",
     "CONSUMER AND BRAND": "Consumer & Brand",
@@ -364,32 +397,23 @@ NORMALIZATION_MAP = {
 }
 
 def normalize_category_from_model_output(raw_text):
-    """
-    Convierte la respuesta libre del modelo a UNA categoría canónica.
-    Si no se puede mapear, devuelve fallback 'Corporate Reputation'.
-    """
     if not raw_text:
         return "Corporate Reputation"
     r = raw_text.strip().upper()
-    # Elimina puntuación común que pueda acompañar la respuesta
     r_clean = re.sub(r"[\"'\.\,]", " ", r)
-    # 1) Match por presencia de frases completas (búsqueda prioritaria)
     for key, canonical in NORMALIZATION_MAP.items():
         if key in r_clean:
             return canonical
-    # 2) Token match: dividir y buscar tokens mapeables
     for token in re.split(r"[\s,;:()\[\]\"']+", r_clean):
         token = token.strip()
         if not token:
             continue
         if token in NORMALIZATION_MAP:
             return NORMALIZATION_MAP[token]
-    # 3) Intentar buscar las categorías canónicas textualmente (safety)
     for can in CANONICAL_CATEGORIES:
         if can.upper() in r:
             return can
-    # 4) Fallback estratégico
-    logging.warning("Salida de modelo no mapeable a categoría: %s", raw_text)
+    logging.warning("Model output not mappable to a category (sanitized).")
     return "Corporate Reputation"
 
 def build_prompt_from_text(texto):
@@ -397,8 +421,6 @@ def build_prompt_from_text(texto):
     t = (texto or "").strip()
     if len(t) > max_chars:
         t = t[:max_chars]
-
-    # Lista exacta de salidas permitidas (cópiala exactamente)
     allowed = [
         "Consumer & Brand",
         "Music",
@@ -410,7 +432,6 @@ def build_prompt_from_text(texto):
         "Corporate Reputation",
     ]
     allowed_line = ", ".join(allowed)
-
     prompt = f"""
 ROL
 Actúa como un Analista de Datos Senior especializado en PR y Reputación Corporativa de TikTok.
@@ -446,7 +467,6 @@ NOTICIA:
 """
     return prompt
 
-
 # --- Limpieza variable obsoleta si estaba presente ---
 try:
     del VALID_SENTIMENTS
@@ -458,7 +478,7 @@ CATEGORY_CACHE_PATH = os.getenv("CATEGORY_CACHE_PATH", "category_cache.json")
 try:
     if os.path.exists(CATEGORY_CACHE_PATH):
         with open(CATEGORY_CACHE_PATH, "r", encoding="utf-8") as fh:
-            tag_cache = json.load(fh)
+            tag_cache = json.load(fh) or {}
     else:
         tag_cache = {}
 except Exception:
@@ -470,33 +490,28 @@ def _call_model_with_retry(prompt, max_attempts=3):
 
 def categorize_text_with_model(texto):
     """
-    Llama al LLM con parámetros controlados (temperature=0) y parseo defensivo.
+    Calls the LLM under a concurrency semaphore and parses defensively.
     """
     try:
-        # Si el modelo no está inicializado (opción B), devolver fallback
         if model is None:
             logging.debug("Model not initialized — returning fallback category")
             return "Corporate Reputation"
 
         prompt = build_prompt_from_text(texto)
 
-        # Llamada determinista y corta: temperatura=0, tope de tokens de salida pequeño
-        # Nota: la firma exacta depende del SDK; usamos kwargs comunes.
-        def call():
+        # ensure concurrency limit for LLM
+        with llm_semaphore:
+            def call():
+                try:
+                    return model.generate_content(prompt, temperature=0, max_output_tokens=20)
+                except TypeError:
+                    return model.generate_content(prompt)
             try:
-                return model.generate_content(prompt, temperature=0, max_output_tokens=20)
-            except TypeError:
-                # si SDK no acepta esos nombres, intentar sin kwargs
-                return model.generate_content(prompt)
+                resp = retry(call, max_attempts=3)
+            except Exception as e:
+                logging.warning("Model call failed after retries (sanitized): %s", e)
+                return "Corporate Reputation"
 
-        # usar tu retry wrapper para tolerar 429/errores temporales
-        try:
-            resp = retry(call, max_attempts=3)
-        except Exception as e:
-            logging.warning("Model call failed after retries: %s", e)
-            return "Corporate Reputation"
-
-        # parsing defensivo
         raw = ""
         try:
             raw = getattr(resp, "text", None) or ""
@@ -505,7 +520,6 @@ def categorize_text_with_model(texto):
 
         if not raw:
             try:
-                # algunos SDK devuelven candidates -> content
                 cand = getattr(resp, "candidates", None)
                 if cand and len(cand) > 0:
                     raw = getattr(cand[0], "content", "") or str(cand[0])
@@ -514,30 +528,29 @@ def categorize_text_with_model(texto):
 
         raw = (raw or "").strip()
 
-        # DEBUG: log breve de respuestas inesperadas (puedes bajar a DEBUG level después)
-        if raw.startswith("(") or raw.lower().startswith("por favor") or "proporciona la noticia" in raw.lower():
-            logging.warning("Modelo retornó mensaje de sistema/clarificación: %s", raw)
+        # Quick sanity checks for system-style replies; fallback if suspicious
+        lower_raw = raw.lower()
+        if raw.startswith("(") or lower_raw.startswith("por favor") or "proporciona la noticia" in lower_raw:
+            logging.warning("Model returned a system/clarification message; using fallback category.")
             return "Corporate Reputation"
 
-        # Normalizar y mapear a categoría
         cat = normalize_category_from_model_output(raw)
         if cat == "Corporate Reputation" and raw.upper() not in [c.upper() for c in CANONICAL_CATEGORIES]:
-            # si normalizador cae en fallback, loguear raw para debugging (no inunda logs)
-            logging.warning("Salida de modelo no mapeable a categoría: %s", raw)
+            logging.debug("Model returned unmapped raw output (sanitized).")
         return cat
 
     except Exception as e:
-        logging.warning("Error categorizando texto con model: %s", e)
+        logging.warning("Error categorizing text with model: %s", e)
         return "Corporate Reputation"
-
 
 def categorize_row_obtaining_text(row):
     url = (row.get("link") or "").strip()
     k = url_key(url)
 
     # Cache hit
-    if k and k in tag_cache:
-        return tag_cache[k]
+    with tag_cache_lock:
+        if k and k in tag_cache:
+            return tag_cache[k]
 
     body = (row.get("article_body") or "").strip()
     if not body and url:
@@ -562,7 +575,8 @@ def categorize_row_obtaining_text(row):
 
     if k:
         try:
-            tag_cache[k] = category
+            with tag_cache_lock:
+                tag_cache[k] = category
         except Exception:
             pass
 
@@ -591,28 +605,25 @@ final_df = final_df.drop(columns=["index"]).reset_index(drop=True)
 
 logging.info("Category classification completed. Distribution: %s", final_df["tag"].value_counts().to_dict())
 
-# Persistir tag cache
+# Persistir tag cache atomically
 try:
-    with open(CATEGORY_CACHE_PATH, "w", encoding="utf-8") as fh:
-        json.dump(tag_cache, fh, ensure_ascii=False, indent=2)
+    atomic_write_json(CATEGORY_CACHE_PATH, tag_cache)
 except Exception as e:
-    logging.warning("No se pudo guardar category cache: %s", e)
+    logging.warning("Could not save category cache: %s", e)
 
 # ---------------------------
-# SENTIMENT CLASSIFICATION (POSITIVO / NEGATIVO / NEUTRO) - usando Gemini
+# SENTIMENT CLASSIFICATION (POSITIVO / NEGATIVO / NEUTRO) - using Gemini
 # ---------------------------
 
 def analizar_noticia(url):
     try:
-        # Descargar la página
-        response = requests.get(url, timeout=10)
+        response = session.get(url, timeout=REQUEST_TIMEOUT)
+        if response.status_code != 200 or not response.text:
+            return "NEUTRO"
         soup = BeautifulSoup(response.text, "html.parser")
-
-        # Extraer solo el texto visible
         paragraphs = [p.get_text() for p in soup.find_all("p")]
-        texto = " ".join(paragraphs)  
+        texto = " ".join(paragraphs)
 
-        # Prompt claro y forzado a solo una palabra
         prompt = f"""
         ROL
 Actúa como Analista Senior de PR/Reputación. Tu única tarea es determinar si la noticia
@@ -629,17 +640,17 @@ NOTICIA:
         {texto}
         """
 
-        # Usar el modelo que ya inicializaste afuera
-        response = model.generate_content(prompt)
-        resultado = response.text.strip().upper()
-
-        # Validación por seguridad
+        # Use semaphore to control concurrency
+        with llm_semaphore:
+            resp = model.generate_content(prompt)
+        resultado = getattr(resp, "text", "") or ""
+        resultado = resultado.strip().upper()
         if resultado not in ["POSITIVO", "NEGATIVO", "NEUTRO"]:
             return "NEUTRO"
         return resultado
 
     except Exception as e:
-        print(f"Error procesando {url}: {e}")
+        logging.warning("Error processing %s: %s", url, e)
         return "NEUTRO"
 
 #final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
@@ -658,35 +669,30 @@ HEADER = ['semana','date_utc','country','title','link','domain','source','snippe
 try:
     result = sheet_service.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
     values = result.get("values", [])
-    logging.info("Leídas %d filas desde la hoja (incl header si existía).", len(values))
+    logging.info("Read %d rows from sheet (including header if present).", len(values))
 except HttpError as e:
-    logging.exception("Failed to read existing sheet: %s", e)
+    logging.exception("Failed to read existing sheet (sanitized): %s", e)
     values = []
 except Exception as e:
-    logging.exception("Failed to read existing sheet: %s", e)
+    logging.exception("Failed to read existing sheet (sanitized): %s", e)
     values = []
 
 # 2) Build set of existing links from the sheet to avoid duplicate appends
 existing_links_set = set()
 sheet_has_header = False
 if values and len(values) >= 1:
-    # assume first row is header if it matches at least some of our header names
     header_row = values[0]
-    # find link index robustly
     link_idx = None
     try:
         link_idx = header_row.index('link')
         sheet_has_header = True
     except ValueError:
-        # try case-insensitive match
         row_lower = [c.lower() for c in header_row]
         if 'link' in row_lower:
             link_idx = row_lower.index('link')
             sheet_has_header = True
         else:
-            # fallback: if header length matches our HEADER, assume it's our header
             if len(header_row) == len(HEADER):
-                # assume the header order matches
                 try:
                     link_idx = HEADER.index('link')
                     sheet_has_header = True
@@ -703,39 +709,27 @@ if values and len(values) >= 1:
             except Exception:
                 continue
 
-# If sheet was empty (no values) we will write header first
 sheet_empty = len(values) == 0
 
-# 3) Ensure final_df has correct columns and sanitized values (you already prepared final_df above)
-# Re-use your sanitization logic to produce the rows to append (but only for new links)
-
-# Ensure final_df contains header columns
+# 3) Ensure final_df has correct columns and sanitized values
 for col in HEADER:
     if col not in final_df.columns:
         final_df[col] = ''
 
-# drop duplicates by link/title/snippet as you already did
 final_df = final_df.replace([np.nan, pd.NaT, None], '').replace([np.inf, -np.inf], '')
 
 # Build list of candidate rows (in correct order), and filter out ones with link already in sheet
 rows_to_add = []
 new_links_count = 0
 for row in final_df[HEADER].values.tolist():
-    # row is list ordered as HEADER
-    # sanitize each cell similarly to your sanitize_cell
-    sanitized_row = []
-    # create a dict-like mapping for convenience
     row_map = dict(zip(HEADER, row))
     link = str(row_map.get('link', '')).strip()
-    # Skip if link missing
     if not link:
         continue
     if link in existing_links_set:
         continue
-    # Sanitize each cell (reuse your sanitize_cell behavior)
     sanitized_cells = []
     for cell in row:
-        # simple sanitize: convert to str, guard special pandas types
         if isinstance(cell, (np.integer,)):
             val = int(cell)
         elif isinstance(cell, (np.floating,)):
@@ -766,12 +760,12 @@ for row in final_df[HEADER].values.tolist():
     new_links_count += 1
 
 if new_links_count == 0 and not sheet_empty:
-    logging.info("No hay filas nuevas para agregar. Saliendo sin tocar la hoja.")
-    logging.info("Script finished correctamente.")
+    logging.info("No new rows to add. Exiting without touching the sheet.")
+    logging.info("Script finished successfully.")
     sys.exit(0)
 
 # 4) Prepare batches and append with retries/backoff
-BATCH_SIZE = int(os.getenv("SHEET_BATCH_SIZE", "500"))  # ajustable
+BATCH_SIZE = int(os.getenv("SHEET_BATCH_SIZE", "500"))  # adjustable
 def sheets_append_batch(values_batch):
     body = {"values": values_batch}
     return sheet_service.values().append(
@@ -790,28 +784,27 @@ def append_with_retry(batch, max_attempts=5, base_delay=1.5):
         except HttpError as e:
             attempt += 1
             if attempt >= max_attempts:
-                logging.exception("Failed to append batch to Sheets after %d attempts: %s", attempt, e)
+                logging.exception("Failed to append batch to Sheets after %d attempts (sanitized).", attempt)
                 raise
-            # exponential backoff with jitter
             sleep_for = min(60, base_delay * (2 ** (attempt - 1))) + random.random() * 0.5
-            logging.warning("HttpError appending to Sheets (attempt %d/%d): %s — retrying in %.1fs", attempt, max_attempts, e, sleep_for)
+            logging.warning("HttpError appending to Sheets (attempt %d/%d) — retrying in %.1fs", attempt, max_attempts, sleep_for)
             time.sleep(sleep_for)
         except Exception as e:
             attempt += 1
             if attempt >= max_attempts:
-                logging.exception("Failed to append batch to Sheets after %d attempts: %s", attempt, e)
+                logging.exception("Failed to append batch to Sheets after %d attempts (sanitized).", attempt)
                 raise
             sleep_for = min(60, base_delay * (2 ** (attempt - 1))) + random.random() * 0.5
-            logging.warning("Error appending to Sheets (attempt %d/%d): %s — retrying in %.1fs", attempt, max_attempts, e, sleep_for)
+            logging.warning("Error appending to Sheets (attempt %d/%d) — retrying in %.1fs", attempt, max_attempts, sleep_for)
             time.sleep(sleep_for)
 
 # if sheet empty, write header first (one-time)
 if sheet_empty:
-    logging.info("Hoja vacía: escribiendo header primero.")
+    logging.info("Sheet empty: writing header first.")
     try:
         append_with_retry([HEADER])
     except Exception as e:
-        logging.exception("No se pudo escribir el header en la sheet: %s", e)
+        logging.exception("Could not write header to sheet (sanitized).")
         raise
 
 # Append in batches
@@ -823,9 +816,8 @@ for i in range(0, len(rows_to_add), BATCH_SIZE):
         total_added += len(batch)
         logging.info("Appended batch %d..%d (rows=%d) to sheet.", i, i+len(batch)-1, len(batch))
     except Exception as e:
-        logging.exception("Failed appending batch starting at %d: %s", i, e)
-        # continue attempting next batches (or you may prefer to abort)
+        logging.exception("Failed appending batch starting at %d (sanitized).", i)
         continue
 
 logging.info("✅ Sheet updated. New rows appended: %d", total_added)
-logging.info("Script finished correctamente.")
+logging.info("Script finished successfully.")
