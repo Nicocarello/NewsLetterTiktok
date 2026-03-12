@@ -246,15 +246,16 @@ def format_email_html(df, window_label, competencia_df=None):
 
 
 def send_email(subject, body):
-    recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    # recipients = ["nicolas.carello@publicalatam.com"]
+    # recipients = [r.strip() for r in RECIPIENTS if r.strip()]
+    recipients = ["nicolas.carello@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
 
     msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
-    msg["From"] = EMAIL_USER
+    # msg["From"] = EMAIL_USER
+    msg["From"] = "suscripciones@publicalatam.com"
     msg["To"] = ", ".join(recipients)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
