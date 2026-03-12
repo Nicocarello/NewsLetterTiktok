@@ -29,7 +29,6 @@ TZ_ARG = pytz.timezone("America/Argentina/Buenos_Aires")
 
 # === Funciones ===
 def get_sheet_data():
-    """Descarga los datos de la hoja de Google Sheets (normaliza filas ragged)."""
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
         range="2026!A:M"
@@ -48,8 +47,8 @@ def get_sheet_data():
 
     return pd.DataFrame(normalized, columns=header)
 
+
 def get_competencia_data():
-    """Descarga los datos de la hoja 'Competencia' (normaliza filas ragged)."""
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
         range="Competencia!A:L"
@@ -70,14 +69,8 @@ def get_competencia_data():
 
 
 def is_si_mask(series):
-    """
-    Devuelve una máscara booleana True cuando la celda equivale a 'si' o 'sí'
-    (acepta mayúsculas/minúsculas y espacios).
-    """
-    # aseguramos trabajar sobre strings y quitamos NaNs
     s = series.fillna("").astype(str).str.strip().str.lower()
 
-    # normalizar acentos (convierte 'sí' -> 'si')
     def _normalize(text):
         nfkd = unicodedata.normalize("NFKD", text)
         return "".join([c for c in nfkd if not unicodedata.combining(c)])
@@ -87,33 +80,28 @@ def is_si_mask(series):
 
 def sentiment_badge(label: str) -> str:
     lab = (label or "").strip().upper()
-    color = "#9e9e9e"  # neutro default
+    color = "#9e9e9e"
     if lab == "POSITIVO":
-        color = "#2e7d32"  # verde
+        color = "#2e7d32"
     elif lab == "POSITIVO (PROACTIVO)":
-        color = "#2e7d32"  # verde
+        color = "#2e7d32"
     elif lab == "NEGATIVO":
-        color = "#c62828"  # rojo
+        color = "#c62828"
     elif lab == "NEUTRO":
-        color = "#616161"  # gris
+        color = "#616161"
     return (
         f"<span style='display:inline-block;padding:2px 8px;border-radius:12px;"
         f"font-size:12px;color:#fff;background:{color};'>{lab or 'NEUTRO'}</span>"
     )
 
+
 def filter_by_window(df, now):
-    """
-    - Lun 09:00: ventana desde Vie 09:00 -> Lun 09:00 (3 días hacia atrás)
-    - Mar-Vie 09:00: ventana desde ayer 09:00 -> hoy 09:00 (1 día hacia atrás)
-    - Sáb y Dom: no se envía (se corta en main)
-    """
-    # Parse y localiza scraped_at en ART
     df["scraped_at_dt"] = pd.to_datetime(
         df["scraped_at"], format="%d/%m/%Y %H:%M", errors="coerce"
     ).dt.tz_localize(TZ_ARG)
 
-    weekday = now.weekday()  # Mon=0 ... Sun=6
-    days_back = 3 if weekday == 0 else 1  # lunes 3, resto 1 (sábado/domingo no se ejecuta)
+    weekday = now.weekday()
+    days_back = 3 if weekday == 0 else 1
 
     start = (now - timedelta(days=days_back)).replace(hour=9, minute=0, second=0, microsecond=0)
     end = now.replace(hour=9, minute=0, second=0, microsecond=0)
@@ -121,39 +109,15 @@ def filter_by_window(df, now):
 
     return df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)], label
 
-# Diccionario de imágenes de país
-#COUNTRY_IMAGES = {
-#    "Argentina": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/ARG.png",
-#    "Chile": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/CHILE.png",
-#    "Peru": "https://raw.githubusercontent.com/vickyarrudi/newsletter-banderas/main/PERU.png"
-#}
-
-def filter_tiktok_mentions(df):
-    """
-    Keep only rows where title (D) or snippet (H)
-    contains 'tiktok' or its variations.
-    """
-    pattern = r"\btik[\s\-]?tok\w*\b"
-
-    title_col = "D" if "D" in df.columns else "title"
-    snippet_col = "H" if "H" in df.columns else "snippet"
-
-    title_match = df[title_col].fillna("").str.contains(pattern, case=False, regex=True)
-    snippet_match = df[snippet_col].fillna("").str.contains(pattern, case=False, regex=True)
-
-    return df[title_match | snippet_match]
-
-
 
 def clean_value(val):
-    """Limpia valores nulos o placeholders."""
     if val is None or pd.isna(val):
         return ""
     s_val = str(val).strip()
-    # Regex para detectar placeholders tipo {Title}
     if re.match(r'^\s*\{.+?\}\s*$', s_val):
         return ""
     return s_val
+
 
 def format_email_html(df, window_label, competencia_df=None):
     if df.empty and (competencia_df is None or competencia_df.empty):
@@ -166,7 +130,6 @@ def format_email_html(df, window_label, competencia_df=None):
         df["tag"] = "generales"
     df["tag_norm"] = df["tag"].fillna("generales").astype(str).str.strip().str.upper()
 
-    # Normalizar sentiment
     if "sentiment" not in df.columns:
         df["sentiment"] = "NEUTRO"
     df["sentiment_norm"] = (
@@ -178,21 +141,6 @@ def format_email_html(df, window_label, competencia_df=None):
         "<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' "
         "alt='Header' style='max-width:70%; height:auto;'>"
         "</div>",
-
-        # "<div style='width:70%;"
-        # "margin:0 auto 30px auto;"
-        # "background-color:#000000;"
-        # "padding:10px 0;"
-        # "text-align:center;'>"
-        # "<span style='font-family:Arial, Helvetica, sans-serif;"
-        # "font-size:42px;"
-        # "font-weight:800;"
-        # "letter-spacing:-0.5px;'>"
-        # "<span style='color:#FFFFFF;'>TikTok</span>"
-        # "<span style='color:#00F2EA;'> / </span>"
-        # "<span style='color:#fe2c55;'>Institutional</span>"
-        # "</span>"
-        # "</div>"
     ]
 
     def sort_news(dfpart):
@@ -201,8 +149,7 @@ def format_email_html(df, window_label, competencia_df=None):
             sort_key = sort_key.fillna(dfpart["scraped_at_dt"])
         return dfpart.assign(_k=sort_key).sort_values("_k", ascending=False)
 
-    # render_card (idéntica a la que ya tenías)
-    def render_card(row):
+    def render_card(row, show_sentiment=True):
         title = ""
         snippet = ""
         for col in ["title", "Title", "titulo", "headline", "D"]:
@@ -227,133 +174,79 @@ def format_email_html(df, window_label, competencia_df=None):
         tier = clean_value(row.get("tier") or row.get("L"))
         link = clean_value(row.get("link") or row.get("url") or row.get("E"))
 
-        raw_sentiment = clean_value(row.get("sentiment_norm") or row.get("sentiment") or "NEUTRO")
-        sentiment_html = sentiment_badge(raw_sentiment)
-
-        tag = clean_value(row.get("tag"))
-        tag_html = ""
-        if tag:
-            tag_html = (
-                f"<div style='display:inline-block;padding:3px 8px;border-radius:1px;"
-                f"background:#fe3355;color:#fff;font-weight:bold;font-size:12px;margin-bottom:8px;"
-                f"font-family:Helvetica,sans-serif;text-transform:uppercase'>{tag}</div>"
+        sentiment_block = ""
+        if show_sentiment:
+            raw_sentiment = clean_value(row.get("sentiment_norm") or row.get("sentiment") or "NEUTRO")
+            sentiment_html = sentiment_badge(raw_sentiment)
+            sentiment_block = (
+                f"<div style='margin-bottom:4px;'>"
+                f"<strong style='color:#000000'>Sentiment:</strong> {sentiment_html}"
+                f"</div>"
             )
 
         return (
             f"<div style='background:#fff;border:1px solid #e0e0e0;border-radius:8px;"
             f"padding:15px;margin:0 auto 15px auto;width:65%;"
             f"box-shadow:0 1px 2px rgba(0,0,0,0.05);'>"
-            f"{tag_html}"
-            f"<h3 style='margin:5px 0 12px;"
-            f"font-size:20px;"
-            f"font-weight:800;"
-            f"letter-spacing:-0.4px;"
-            f"color:#000000;"
-            f"font-family:Arial, Helvetica, sans-serif;"
-            f"line-height:1.15;'>"
+            f"<h3 style='margin:5px 0 12px;font-size:20px;font-weight:800;letter-spacing:-0.4px;color:#000000;font-family:Arial, Helvetica, sans-serif;line-height:1.15;'>"
             f"<a href='{link}' style='text-decoration:none;color:#000000;'>"
             f"{title}</a></h3>"
-            f"<p style='margin:0 0 15px;font-size:12px;color:#000000;font-family:Helvetica,sans-serif;"
-            f"line-height:1.5'>{snippet}</p>"
+            f"<p style='margin:0 0 15px;font-size:12px;color:#000000;font-family:Helvetica,sans-serif;line-height:1.5'>{snippet}</p>"
             f"<div style='border-top:1px solid #f1f3f4;padding-top:12px;font-size:12px;color:#444;font-family:Helvetica,sans-serif;line-height:1.6;'>"
-            f"<div style='margin-bottom:4px;'>"
-            f"<strong style='color:#000000'>Media:</strong> "
-            f"<span style='color:#000000'>{source or '—'}</span>"
-            f"</div>"
-            f"<div style='margin-bottom:4px;'>"
-            f"<strong style='color:#000000'>{tier or '—'}</strong>"
-            f"</div>"
-            f"<div style='margin-bottom:4px;'>"
-            f"<strong style='color:#000000'>Sentiment:</strong> {sentiment_html}"
-            f"</div>"
-            f"<div>"
-            f"<strong style='color:#000000'>Artículo:</strong> "
-            f"<a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none;font-weight:bold'>Leer nota →</a>"
-            f"</div>"
-            f"</div>"
-            f"</div>"
+            f"<div style='margin-bottom:4px;'><strong style='color:#000000'>Media:</strong> <span style='color:#000000'>{source or '—'}</span></div>"
+            f"<div style='margin-bottom:4px;'><strong style='color:#000000'>{tier or '—'}</strong></div>"
+            f"{sentiment_block}"
+            f"<div><strong style='color:#000000'>Artículo:</strong> <a href='{link}' target='_blank' style='color:#1a73e8;text-decoration:none;font-weight:bold'>Leer nota →</a></div>"
+            f"</div></div>"
         )
 
-    # País emojis
     COUNTRY_EMOJIS = {
         "Argentina": "🇦🇷",
         "Chile": "🇨🇱",
         "Peru": "🇵🇪"
     }
 
-    # Desired country order
     countries_order = ["Argentina", "Chile", "Peru"]
 
-    # --- Iterate by country and render Institutional then Competencia per country ---
     for country in countries_order:
         emoji = COUNTRY_EMOJIS.get(country, "")
-        # --- Institutional section for this country (from 2026 sheet / df) ---
+
         inst_group = df[df.get("country") == country] if not df.empty else pd.DataFrame()
         if not inst_group.empty:
             body.append(
-                "<div style='width:70%;"
-                "margin:20px auto 10px auto;"
-                "background-color:#000000;"
-                "padding:10px 0;"
-                "text-align:center;'>"
-                "<span style='font-family:Arial, Helvetica, sans-serif;"
-                "font-size:36px;"
-                "font-weight:800;"
-                "letter-spacing:-0.5px;'>"
-                "<span style='color:#FFFFFF;'>TikTok</span>"
-                "<span style='color:#00F2EA;'> / </span>"
-                f"<span style='color:#fe2c55;'>Institutional — {country} {emoji}</span>"
-                "</span>"
-                "</div>"
+                f"<div style='width:70%;margin:20px auto 10px auto;background-color:#000000;padding:10px 0;text-align:center;'>"
+                f"<span style='font-family:Arial, Helvetica, sans-serif;font-size:36px;font-weight:800;letter-spacing:-0.5px;'>"
+                f"<span style='color:#FFFFFF;'>TikTok</span><span style='color:#00F2EA;'> / </span>"
+                f"<span style='color:#fe2c55;'>Institutional — {country} {emoji}</span></span></div>"
             )
-            # render known tags first
-            known = inst_group[inst_group["tag_norm"].isin(orderTags)]
-            unknown = inst_group[~inst_group["tag_norm"].isin(orderTags)]
 
-            for t in orderTags:
-                block = known[known["tag_norm"] == t]
-                if block.empty:
-                    continue
-                for _, row in sort_news(block).iterrows():
-                    body.append(render_card(row))
+            for _, row in sort_news(inst_group).iterrows():
+                body.append(render_card(row, show_sentiment=True))
 
-            if not unknown.empty:
-                for t in sorted(unknown["tag_norm"].unique()):
-                    block = unknown[unknown["tag_norm"] == t]
-                    for _, row in sort_news(block).iterrows():
-                        body.append(render_card(row))
-
-        # --- SECCIÓN COMPETENCIA (Aquí aplicamos el límite de 3) ---
         comp_group = (
             competencia_df[competencia_df.get("country") == country]
             if (competencia_df is not None and not competencia_df.empty)
             else pd.DataFrame()
         )
-        
+
         if not comp_group.empty:
             body.append(
-                f"<div style='width:70%;margin:20px auto 10px auto;background-color:#000000;"
-                f"padding:10px 0;text-align:center;'>"
+                f"<div style='width:70%;margin:20px auto 10px auto;background-color:#000000;padding:10px 0;text-align:center;'>"
                 f"<span style='font-family:Arial, Helvetica, sans-serif;font-size:36px;font-weight:800;letter-spacing:-0.5px;'>"
                 f"<span style='color:#FFFFFF;'>TikTok</span><span style='color:#00F2EA;'> / </span>"
                 f"<span style='color:#fe2c55;'>Competencia — {country} {emoji}</span></span></div>"
             )
-            
-            # 1. Ordenamos las noticias por fecha (más recientes primero)
-            # 2. Limitamos a las primeras 3 usando .head(3)
+
             comp_sorted_limited = sort_news(comp_group).head(3)
-            
+
             for _, row in comp_sorted_limited.iterrows():
-                body.append(render_card(row))
+                body.append(render_card(row, show_sentiment=False))
 
     return "\n".join(body)
 
 
-
 def send_email(subject, body):
-    """Envía el correo usando SMTP"""
     recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    #recipients = ["nicolas.carello@publicalatam.com","victoria.arrudi@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
@@ -366,18 +259,15 @@ def send_email(subject, body):
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(EMAIL_USER, EMAIL_PASS)
         server.sendmail(EMAIL_USER, recipients, msg.as_string())
-        
 
-# EJECUCION
+
 if __name__ == "__main__":
     now = datetime.now(TZ_ARG)
 
-    # Sábado (5) o domingo (6): no se envía
     if now.weekday() in (5, 6):
         print("ℹ️ Fin de semana: no se envía newsletter.")
         raise SystemExit(0)
 
-    # === Datos institucionales (hoja 2026) ===
     df = get_sheet_data()
     if df.empty:
         print("⚠️ No hay datos en la hoja.")
@@ -388,7 +278,6 @@ if __name__ == "__main__":
         print(f"⚠️ No hay noticias en la ventana {window_label}.")
         raise SystemExit(0)
 
-    # 🔎 Filtrar solo noticias marcadas para enviar (columna 'enviar' = 'si')
     if "enviar" in filtered.columns:
         filtered = filtered[is_si_mask(filtered["enviar"])]
 
@@ -396,50 +285,17 @@ if __name__ == "__main__":
         print(f"⚠️ No hay noticias marcadas para enviar en la ventana {window_label}.")
         raise SystemExit(0)
 
-    # ==============================
-    # 🔕 FILTROS POR TIER DESACTIVADOS
-    # ==============================
-    #
-    # tier_clean = filtered["tier"].fillna("").str.strip().str.upper()
-    # tier1 = filtered[tier_clean == "TIER 1"]
-    #
-    # if not tier1.empty:
-    #     filtered = tier1
-    # else:
-    #     tier2 = filtered[tier_clean == "TIER 2"]
-    #     if not tier2.empty:
-    #         print(f"ℹ️ No hay Tier 1 en la ventana {window_label}. Se enviarán Tier 2.")
-    #         filtered = tier2
-    #     else:
-    #         print(f"⚠️ No hay noticias Tier 1 ni Tier 2 en la ventana {window_label}.")
-    #         raise SystemExit(0)
-
-    # === Competencia ===
     competencia_df = get_competencia_data()
     competencia_filtered = pd.DataFrame()
 
     if not competencia_df.empty:
         competencia_filtered, _ = filter_by_window(competencia_df, now)
 
-        # Filtrar solo competencia marcada para enviar
         if "enviar" in competencia_filtered.columns:
             competencia_filtered = competencia_filtered[
                 is_si_mask(competencia_filtered["enviar"])
             ]
 
-        # ==============================
-        # 🔕 FILTRO TIER 1 COMPETENCIA DESACTIVADO
-        # ==============================
-        #
-        # competencia_filtered = competencia_filtered[
-        #     competencia_filtered["tier"]
-        #     .fillna("")
-        #     .str.strip()
-        #     .str.upper()
-        #     .str.contains("TIER 1")
-        # ]
-
-    # === Generar y enviar email ===
     body = format_email_html(filtered, window_label, competencia_df=competencia_filtered)
     subject = f"Newsletter TikTok ({window_label})"
 
