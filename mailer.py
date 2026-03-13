@@ -254,8 +254,7 @@ def send_email(subject, body):
 
     msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
-    # msg["From"] = EMAIL_USER
-    msg["From"] = "suscripciones@publicalatam.com"
+    msg["From"] = EMAIL_USER
     msg["To"] = ", ".join(recipients)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
