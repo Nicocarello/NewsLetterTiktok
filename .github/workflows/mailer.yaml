@@ -27,7 +27,7 @@ jobs:
       - name: Run mailer
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER_TIKTOK }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS_TIKTOK }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: python mailer.py
