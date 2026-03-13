@@ -181,8 +181,8 @@ def format_email_html(df, window_label, competencia_df=None):
         if tag:
             tag_block = (
                 f"<div style='margin-bottom:6px;'>"
-                f"<span style='display:inline-block;padding:2px 8px;border-radius:12px;"
-                f"font-size:12px;background:#000000;color:#ffffff;font-weight:bold;'>"
+                f"<span style='display:inline-block;padding:2px 8px;border-radius:5px;"
+                f"font-size:12px;background:#ff2c55;color:#ffffff;font-weight:bold;'>"
                 f"{tag}"
                 f"</span></div>"
             )
