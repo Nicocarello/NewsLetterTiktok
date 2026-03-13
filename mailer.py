@@ -160,7 +160,7 @@ def format_email_html(df, window_label, competencia_df=None):
                 break
         if not title and len(row) > 3:
             title = clean_value(row.iloc[3])
-
+    
         for col in ["snippet", "Snippet", "resumen", "body", "H"]:
             cand = row.get(col)
             cleaned = clean_value(cand)
@@ -169,11 +169,24 @@ def format_email_html(df, window_label, competencia_df=None):
                 break
         if not snippet and len(row) > 7:
             snippet = clean_value(row.iloc[7])
-
+    
         source = clean_value(row.get("source") or row.get("domain") or row.get("G"))
         tier = clean_value(row.get("tier") or row.get("L"))
         link = clean_value(row.get("link") or row.get("url") or row.get("E"))
-
+    
+        # NUEVO: obtener TAG (columna I)
+        tag = clean_value(row.get("tag_norm") or row.get("tag") or row.get("I"))
+    
+        tag_block = ""
+        if tag:
+            tag_block = (
+                f"<div style='margin-bottom:6px;'>"
+                f"<span style='display:inline-block;padding:2px 8px;border-radius:12px;"
+                f"font-size:12px;background:#000000;color:#ffffff;font-weight:bold;'>"
+                f"{tag}"
+                f"</span></div>"
+            )
+    
         sentiment_block = ""
         if show_sentiment:
             raw_sentiment = clean_value(row.get("sentiment_norm") or row.get("sentiment") or "NEUTRO")
@@ -183,11 +196,12 @@ def format_email_html(df, window_label, competencia_df=None):
                 f"<strong style='color:#000000'>Sentiment:</strong> {sentiment_html}"
                 f"</div>"
             )
-
+    
         return (
             f"<div style='background:#fff;border:1px solid #e0e0e0;border-radius:8px;"
             f"padding:15px;margin:0 auto 15px auto;width:65%;"
             f"box-shadow:0 1px 2px rgba(0,0,0,0.05);'>"
+            f"{tag_block}"
             f"<h3 style='margin:5px 0 12px;font-size:20px;font-weight:800;letter-spacing:-0.4px;color:#000000;font-family:Arial, Helvetica, sans-serif;line-height:1.15;'>"
             f"<a href='{link}' style='text-decoration:none;color:#000000;'>"
             f"{title}</a></h3>"
