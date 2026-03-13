@@ -20,8 +20,8 @@ service = build('sheets', 'v4', credentials=creds)
 sheet = service.spreadsheets()
 
 # === Configuración Email ===
-EMAIL_USER = os.getenv("EMAIL_USER")
-EMAIL_PASS = os.getenv("EMAIL_PASS")
+EMAIL_USER = os.getenv("EMAIL_USER_TIKTOK")
+EMAIL_PASS = os.getenv("EMAIL_PASS_TIKTOK")
 RECIPIENTS = os.getenv("EMAIL_TO", "").split(",")
 
 # Zona horaria
@@ -246,8 +246,8 @@ def format_email_html(df, window_label, competencia_df=None):
 
 
 def send_email(subject, body):
-    recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    #recipients = ["nicolas.carello@publicalatam.com"]
+    #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
+    recipients = ["nicolas.carello@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
