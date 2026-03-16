@@ -9,6 +9,7 @@ from google.oauth2 import service_account
 import smtplib
 from email.mime.text import MIMEText
 import re
+import numpy as np
 
 # === Configuración Google Sheets ===
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
