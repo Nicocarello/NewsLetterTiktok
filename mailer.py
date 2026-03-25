@@ -260,8 +260,8 @@ def format_email_html(df, window_label, competencia_df=None):
 
 
 def send_email(subject, body):
-    recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    #recipients = ["nicolas.carello@publicalatam.com","victoria.arrudi@publicalatam.com"]
+    #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
+    recipients = ["nicolas.carello@publicalatam.com","victoria.arrudi@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
@@ -288,7 +288,18 @@ if __name__ == "__main__":
         print("⚠️ No hay datos en la hoja.")
         raise SystemExit(0)
 
-    filtered, window_label = filter_by_window(df, now)
+    # filtered, window_label = filter_by_window(df, now)
+    # === OVERRIDE ONE-OFF ===
+    start = TZ_ARG.localize(datetime(2026, 3, 20, 0, 0))
+    end = TZ_ARG.localize(datetime(2026, 3, 25, 23, 59))
+    
+    df["scraped_at_dt"] = pd.to_datetime(
+        df["scraped_at"], format="%d/%m/%Y %H:%M", errors="coerce"
+    ).dt.tz_localize(TZ_ARG)
+    
+    filtered = df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] <= end)]
+    window_label = f"{start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}"
+    
     if filtered.empty:
         print(f"⚠️ No hay noticias en la ventana {window_label}.")
         raise SystemExit(0)
