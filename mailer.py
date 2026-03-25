@@ -288,23 +288,13 @@ if __name__ == "__main__":
         print("⚠️ No hay datos en la hoja.")
         raise SystemExit(0)
 
-    # === ENVÍO ÚNICO: 20/03/2026 al 25/03/2026 ===
-    start = TZ_ARG.localize(datetime(2026, 3, 20, 0, 0, 0))
-    end = TZ_ARG.localize(datetime(2026, 3, 25, 23, 59, 59))
-
-    df["scraped_at_dt"] = pd.to_datetime(
-        df["scraped_at"], format="%d/%m/%Y %H:%M", errors="coerce"
-    ).dt.tz_localize(TZ_ARG)
-
-    filtered = df[
-        (df["scraped_at_dt"] >= start) &
-        (df["scraped_at_dt"] <= end)
-    ]
+    filtered, window_label = filter_by_window(df, now)
+    if filtered.empty:
+        print(f"⚠️ No hay noticias en la ventana {window_label}.")
+        raise SystemExit(0)
 
     if "enviar" in filtered.columns:
         filtered = filtered[is_si_mask(filtered["enviar"])]
-
-    window_label = f"{start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}"
 
     if filtered.empty:
         print(f"⚠️ No hay noticias marcadas para enviar en la ventana {window_label}.")
@@ -314,14 +304,7 @@ if __name__ == "__main__":
     competencia_filtered = pd.DataFrame()
 
     if not competencia_df.empty:
-        competencia_df["scraped_at_dt"] = pd.to_datetime(
-            competencia_df["scraped_at"], format="%d/%m/%Y %H:%M", errors="coerce"
-        ).dt.tz_localize(TZ_ARG)
-
-        competencia_filtered = competencia_df[
-            (competencia_df["scraped_at_dt"] >= start) &
-            (competencia_df["scraped_at_dt"] <= end)
-        ]
+        competencia_filtered, _ = filter_by_window(competencia_df, now)
 
         if "enviar" in competencia_filtered.columns:
             competencia_filtered = competencia_filtered[
