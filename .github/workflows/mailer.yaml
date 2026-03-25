@@ -1,32 +1,32 @@
-# name: Send News Emails
+name: Send News Emails
 
-# on:
-#   schedule:
-#     - cron: "0 12 * * 1-5"
-#   workflow_dispatch:
+on:
+  schedule:
+    - cron: "0 12 * * 1-5"
+  workflow_dispatch:
 
-# jobs:
-#   mailer:
-#     runs-on: ubuntu-latest
-#     env:
-#       TZ: America/Argentina/Buenos_Aires
+jobs:
+  mailer:
+    runs-on: ubuntu-latest
+    env:
+      TZ: America/Argentina/Buenos_Aires
 
-#     steps:
-#       - name: Checkout repo
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-#       - name: Set up Python
-#         uses: actions/setup-python@v5
-#         with:
-#           python-version: "3.11"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-#       - name: Install dependencies
-#         run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-#       - name: Run mailer
-#         env:
-#           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-#           EMAIL_USER_TIKTOK: ${{ secrets.EMAIL_USER_TIKTOK }}
-#           EMAIL_PASS_TIKTOK: ${{ secrets.EMAIL_PASS_TIKTOK }}
-#           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-#         run: python mailer.py
+      - name: Run mailer
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          EMAIL_USER_TIKTOK: ${{ secrets.EMAIL_USER_TIKTOK }}
+          EMAIL_PASS_TIKTOK: ${{ secrets.EMAIL_PASS_TIKTOK }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python mailer.py
