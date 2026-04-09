@@ -51,7 +51,7 @@ if not APIFY_TOKEN:
 COUNTRIES = [c.strip() for c in os.getenv("COUNTRIES", "ar,cl,pe").split(",") if c.strip()]
 QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
-    "youtube,google,instagram,facebook,snapchat,twitter,twitch, redes sociales prohib"
+    "youtube,google,instagram,facebook,snapchat,twitter,twitch,redes sociales prohib,roblox,redes sociales regula"
 ).split(",") if q.strip()]
 
 try:
@@ -228,7 +228,7 @@ REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "15"))
 REQUEST_RETRIES = int(os.getenv("REQUEST_RETRIES", "2"))
 REQUEST_SLEEP_BETWEEN = float(os.getenv("REQUEST_SLEEP_BETWEEN", "0.2"))
 COMPETENCIA_PATTERN = re.compile(
-    r"\b(youtube|google|instagram|facebook|snapchat|twitter|twitch)\b",
+    r"\b(youtube|google|instagram|facebook|snapchat|twitter|twitch|roblox|redes sociales prohib|redes sociales regula)\b",
     flags=re.IGNORECASE
 )
 
