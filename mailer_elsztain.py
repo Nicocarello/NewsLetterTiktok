@@ -28,8 +28,7 @@ sheet = service.spreadsheets()
 # === Configuración Email (Gmail SMTP) ===
 EMAIL_USER = os.getenv("EMAIL_USER_INSIGHTS")
 EMAIL_PASS = os.getenv("EMAIL_PASSWORD_INSIGHTS")
-#RECIPIENTS = [e.strip() for e in os.getenv("EMAIL_TO_ELSZTAIN", "").split(",") if e.strip()]
-RECIPIENTS = "victoria.arrudi@publicalatam.com"
+RECIPIENTS = [e.strip() for e in os.getenv("EMAIL_TO_ELSZTAIN", "").split(",") if e.strip()]
 
 # Zona horaria
 TZ_ARG = pytz.timezone("America/Argentina/Buenos_Aires")
@@ -176,32 +175,20 @@ def send_email(subject: str, body_html: str):
 
 # === Ejecución ===
 if __name__ == "__main__":
-        # === ONE-SHOT: últimas 24 horas ===
     now = datetime.now(TZ_ARG)
+
     df = get_sheet_data()
-    
     if df.empty:
         print("⚠️ No hay datos en la hoja.")
         raise SystemExit(0)
-    
-    # Parse igual que en tu función
-    dt = pd.to_datetime(df["scraped_at"], format="%d/%m/%Y %H:%M", errors="coerce")
-    df = df.copy()
-    df["scraped_at_dt"] = dt.dt.tz_localize(TZ_ARG, nonexistent='NaT', ambiguous='NaT')
-    
-    start = now - timedelta(hours=24)
-    end = now
-    
-    filtered = df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)].copy()
-    
+
+    filtered, window_label = filter_by_window(df, now)
     if filtered.empty:
-        print("⚠️ No hay noticias en las últimas 24 horas.")
+        print(f"⚠️ No hay noticias en esta ventana ({window_label}).")
         raise SystemExit(0)
-    
-    filtered = filtered.sort_values(["source", "scraped_at_dt"], ascending=[True, False])
-    
-    body = format_email_html(filtered, "Últimas 24 horas")
-    subject = "Noticias Elsztain (Últimas 24 horas)"
-    
+
+    body = format_email_html(filtered, window_label)
+    subject = f"Noticias Elsztain ({window_label})"
+
     send_email(subject, body)
-    print("✅ Email 24hs enviado correctamente.")
+    print("✅ Email enviado correctamente.")
