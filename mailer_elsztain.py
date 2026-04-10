@@ -26,8 +26,8 @@ service = build('sheets', 'v4', credentials=creds, cache_discovery=False)
 sheet = service.spreadsheets()
 
 # === Configuración Email (Gmail SMTP) ===
-EMAIL_USER = os.getenv("EMAIL_USER")
-EMAIL_PASS = os.getenv("EMAIL_PASS")
+EMAIL_USER = os.getenv("EMAIL_USER_INSIGHTS")
+EMAIL_PASS = os.getenv("EMAIL_PASSWORD_INSIGHTS")
 RECIPIENTS = [e.strip() for e in os.getenv("EMAIL_TO_ELSZTAIN", "").split(",") if e.strip()]
 
 # Zona horaria
