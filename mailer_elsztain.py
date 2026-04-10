@@ -176,20 +176,32 @@ def send_email(subject: str, body_html: str):
 
 # === Ejecución ===
 if __name__ == "__main__":
+        # === ONE-SHOT: últimas 24 horas ===
     now = datetime.now(TZ_ARG)
-
     df = get_sheet_data()
+    
     if df.empty:
         print("⚠️ No hay datos en la hoja.")
         raise SystemExit(0)
-
-    filtered, window_label = filter_by_window(df, now)
+    
+    # Parse igual que en tu función
+    dt = pd.to_datetime(df["scraped_at"], format="%d/%m/%Y %H:%M", errors="coerce")
+    df = df.copy()
+    df["scraped_at_dt"] = dt.dt.tz_localize(TZ_ARG, nonexistent='NaT', ambiguous='NaT')
+    
+    start = now - timedelta(hours=24)
+    end = now
+    
+    filtered = df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)].copy()
+    
     if filtered.empty:
-        print(f"⚠️ No hay noticias en esta ventana ({window_label}).")
+        print("⚠️ No hay noticias en las últimas 24 horas.")
         raise SystemExit(0)
-
-    body = format_email_html(filtered, window_label)
-    subject = f"Noticias Elsztain ({window_label})"
-
+    
+    filtered = filtered.sort_values(["source", "scraped_at_dt"], ascending=[True, False])
+    
+    body = format_email_html(filtered, "Últimas 24 horas")
+    subject = "Noticias Elsztain (Últimas 24 horas)"
+    
     send_email(subject, body)
-    print("✅ Email enviado correctamente.")
+    print("✅ Email 24hs enviado correctamente.")
