@@ -261,7 +261,7 @@ def format_email_html(df, window_label, competencia_df=None):
 
 def send_email(subject, body):
     recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    recipients += ["victoria.arrudi@publicalatam.com"]
+    recipients += ["victoria.arrudi@publicalatam.com", "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
