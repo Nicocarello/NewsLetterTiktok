@@ -1,4 +1,4 @@
-name: Run News Scraper
+name: Run BHP News Scraper
 
 on:
   schedule:
