@@ -663,7 +663,7 @@ else:
 
 final_df = safe_convert_date_col(final_df, "date_utc")
 
-for col in ("tag", "semana", "article_body", "sentiment"):
+for col in ("tag", "article_body"):
     if col not in final_df.columns:
         final_df[col] = ""
 
@@ -676,8 +676,8 @@ except Exception:
     final_df["scraped_at"] = final_df["scraped_at"].astype(str).fillna("")
 
 # set semana from date_utc if available
-if "date_utc" in final_df.columns:
-    final_df["semana"] = final_df["date_utc"].apply(format_week_range)
+#if "date_utc" in final_df.columns:
+#    final_df["semana"] = final_df["date_utc"].apply(format_week_range)
 
 # -------------------------------------------------
 # ARTICLE FETCH + PARSE
@@ -841,7 +841,7 @@ NOTICIA:
 # -------------------------------------------------
 # SHEET WRITE
 # -------------------------------------------------
-header = ["semana", "date_utc", "country", "title", "link", "domain", "source", "snippet", "tag", "sentiment", "scraped_at"]
+header = ["date_utc", "country", "title", "link", "domain", "source", "snippet", "tag", "scraped_at"]
 final_df = final_df.reindex(columns=header, fill_value="")
 final_df = final_df.drop_duplicates(subset="link")
 final_df = final_df.drop_duplicates(subset=["title", "snippet"])
