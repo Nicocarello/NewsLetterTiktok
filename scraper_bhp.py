@@ -37,7 +37,7 @@ COMPANY_NAME = os.getenv("COMPANY_NAME", "BHP")
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 GOOGLE_CREDENTIALS_ENV = os.getenv("GOOGLE_CREDENTIALS")
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
-SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1bl5WRNlLNrzUFRrQ0G3zPMkFWd0FExTh6KjwNgzwDcs")
+SPREADSHEET_ID = "1bl5WRNlLNrzUFRrQ0G3zPMkFWd0FExTh6KjwNgzwDcs"
 ACTOR_ID = os.getenv("ACTOR_ID", "easyapi/google-news-scraper")
 
 # --- Gemini config ---
