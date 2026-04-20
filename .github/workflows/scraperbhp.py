@@ -25,4 +25,5 @@ jobs:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SPREADSHEET_ID: "1bl5WRNlLNrzUFRrQ0G3zPMkFWd0FExTh6KjwNgzwDcs"
         run: python scraper_bhp.py
