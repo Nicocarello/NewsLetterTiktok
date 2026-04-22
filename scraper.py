@@ -139,6 +139,13 @@ def safe_convert_date_col(df, col='date_utc'):
         df[col] = df[col].astype(str).fillna('')
     return df
 
+def normalize_link(url):
+    if not url:
+        return ''
+    url = str(url).strip()
+    url = re.sub(r'/amp/?$', '', url)   # quita /amp o /amp/ al final
+    return url
+
 # Optional helper
 import calendar
 def format_week_range(date_str):
@@ -233,6 +240,7 @@ if not all_dfs:
 final_df = pd.concat(all_dfs, ignore_index=True)
 
 if 'link' in final_df.columns:
+    final_df['link'] = final_df['link'].apply(normalize_link)
     final_df.drop_duplicates(subset=["link"], inplace=True)
 else:
     logging.warning("No 'link' column present in scraped items; duplicates won't be removed by link.")
@@ -276,7 +284,8 @@ def save_cache(path, data):
 
 article_cache = load_cache(CACHE_PATH)
 
-def url_key(u): return u.strip() if u else ''
+def url_key(u):
+    return normalize_link(u)
 
 # Configure session with adapter and moderate pool sizes
 session = requests.Session()
@@ -342,7 +351,7 @@ with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
 
 save_cache(CACHE_PATH, article_cache)
 
-final_df['link'] = final_df['link'].astype(str)
+final_df['link'] = final_df['link'].astype(str).apply(normalize_link)
 final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_key(u), '')).fillna('')
 
 # ---------------------------
@@ -544,7 +553,7 @@ def categorize_text_with_model(texto):
         return "Corporate Reputation"
 
 def categorize_row_obtaining_text(row):
-    url = (row.get("link") or "").strip()
+    url = normalize_link((row.get("link") or "").strip())
     k = url_key(url)
 
     # Cache hit
@@ -583,7 +592,7 @@ def categorize_row_obtaining_text(row):
     return category
 
 # Ejecutar clasificación en paralelo
-rows_to_categorize = final_df.reset_index()[["index","link","article_body"]].to_dict(orient="records")
+rows_to_categorize = final_df.reset_index()[["index", "link", "article_body"]].to_dict(orient="records")
 logging.info("Starting category classification for %d rows (workers=%d)...", len(rows_to_categorize), MAX_FETCH_WORKERS)
 
 categories_map = {}
@@ -656,14 +665,15 @@ NOTICIA:
 #final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
 
 # Ensure column order and presence (header keeps 'tag' and 'sentiment' if you want both)
-header = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
+header = ['semana', 'date_utc', 'country', 'title', 'link', 'domain', 'source', 'snippet', 'tag', 'sentiment', 'scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
+final_df['link'] = final_df['link'].astype(str).apply(normalize_link)
 final_df = final_df.drop_duplicates(subset='link')
 final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
 # --- Read existing sheet and combine (incremental append instead of full rewrite) ---
 SHEET_RANGE = "2026!A:K"
-HEADER = ['semana','date_utc','country','title','link','domain','source','snippet','tag','sentiment','scraped_at']
+HEADER = ['semana', 'date_utc', 'country', 'title', 'link', 'domain', 'source', 'snippet', 'tag', 'sentiment', 'scraped_at']
 
 # 1) Read current sheet values (if any)
 try:
@@ -703,7 +713,7 @@ if values and len(values) >= 1:
         for r in values[1:]:
             try:
                 if len(r) > link_idx:
-                    v = r[link_idx].strip()
+                    v = normalize_link(r[link_idx].strip())
                     if v:
                         existing_links_set.add(v)
             except Exception:
@@ -723,7 +733,7 @@ rows_to_add = []
 new_links_count = 0
 for row in final_df[HEADER].values.tolist():
     row_map = dict(zip(HEADER, row))
-    link = str(row_map.get('link', '')).strip()
+    link = normalize_link(str(row_map.get('link', '')).strip())
     if not link:
         continue
     if link in existing_links_set:
@@ -814,7 +824,7 @@ for i in range(0, len(rows_to_add), BATCH_SIZE):
     try:
         append_with_retry(batch)
         total_added += len(batch)
-        logging.info("Appended batch %d..%d (rows=%d) to sheet.", i, i+len(batch)-1, len(batch))
+        logging.info("Appended batch %d..%d (rows=%d) to sheet.", i, i + len(batch) - 1, len(batch))
     except Exception as e:
         logging.exception("Failed appending batch starting at %d (sanitized).", i)
         continue
