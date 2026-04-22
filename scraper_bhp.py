@@ -67,7 +67,7 @@ QUERIES = [q.strip() for q in os.getenv(
 
     "QUERIES",
     "BHP Argentina,BHP Group Argentina,BHP Billiton Argentina,Proyecto Vicuña,"
-    "Filo del Sol Argentina,Josemaría Argentina,Lundin Mining,Vicuña bhp"
+    "Filo del Sol Argentina,Lundin Mining,Vicuña bhp"
     "cobre Argentina,litio Argentina,minería Argentina,RIGI minería,Vicuña corp,"
     "San Juan minería,Mendoza minería,CAEM Argentina,Arminera Argentina,BHP,NGEx Minerals,Filo Corp"
 
