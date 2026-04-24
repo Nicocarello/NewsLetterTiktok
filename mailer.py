@@ -144,10 +144,20 @@ def format_email_html(df, window_label, competencia_df=None):
     ]
 
     def sort_news(dfpart):
-        sort_key = pd.to_datetime(dfpart.get("date_utc", pd.NaT), errors="coerce", utc=True)
-        if "scraped_at_dt" in dfpart.columns:
-            sort_key = sort_key.fillna(dfpart["scraped_at_dt"])
-        return dfpart.assign(_k=sort_key).sort_values("_k", ascending=False)
+    sent_order = {
+        "POSITIVO": 0,
+        "POSITIVO (PROACTIVO)": 0,
+        "NEGATIVO": 1,
+        "NEUTRO": 2
+    }
+
+    dfpart["sent_order"] = (
+        dfpart["sentiment_norm"]
+        .map(sent_order)
+        .fillna(99)
+    )
+
+    return dfpart.sort_values("sent_order", ascending=True)
 
     def render_card(row, show_sentiment=True):
         title = ""
