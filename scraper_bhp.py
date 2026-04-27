@@ -190,13 +190,13 @@ MONITORING_TERMS = [
     "BHP sustainability report", "BHP ESG",
 
     # Vicuña / Lundin
-    "Vicuña", "Vicuña Corp", "proyecto Vicuña", "Distrito Vicuña",
+    "Vicuña Corp", "proyecto Vicuña", "Distrito Vicuña",
     "Filo del Sol", "Filo Corp",
     "Lundin Mining", "Jack Lundin", "Adam Lundin", "Juan Andrés Morel",
     "Juan Andres Morel", "Integrated Technical Study", "Tratado de Integración Minera",
     "Tratado de Integracion Minera", "cobre San Juan",
     "RIGI Vicuña", "RIGI Josemaría", "RIGI Josemaria",
-    "Fluor", "Vicuña proveedores", "Vicuña empleo", "Proyecto Vicuña",
+    "Fluor", "Vicuña proveedores", "Proyecto Vicuña",
 
     # Contexto argentino
     "Javier Milei", "Luis Caputo", "Daniel González", "Daniel Gonzalez",
@@ -254,7 +254,7 @@ CANONICAL_CATEGORIES = [
 
 CATEGORY_KEYWORDS = {
     "BHP Vicuña Lundin": [
-        "Vicuña", "Vicuña Corp", "proyecto Vicuña", "Distrito Vicuña",
+        "Vicuña Corp", "vicuña", "proyecto Vicuña", "Distrito Vicuña",
         "Filo del Sol", "Filo Corp", "Josemaría", "Josemaria", "FDS",
         "Lundin Mining", "Jack Lundin", "Adam Lundin", "Juan Andrés Morel",
         "Juan Andres Morel", "Integrated Technical Study", "Tratado de Integración Minera",
