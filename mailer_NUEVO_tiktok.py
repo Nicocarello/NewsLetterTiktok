@@ -8,11 +8,11 @@ from googleapiclient.discovery import build
 from google.oauth2 import service_account
 import smtplib
 from email.mime.text import MIMEText
-import re
 
 # === CONFIG ===
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 SPREADSHEET_ID = "19IqmQBolSHFvXJN5zNSEmUXw9ivqaxzymXg62S6QhkU"
+CONTAINER_WIDTH = "700px"
 
 creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
@@ -25,7 +25,6 @@ EMAIL_PASS = os.getenv("EMAIL_PASS_TIKTOK")
 TZ_ARG = pytz.timezone("America/Argentina/Buenos_Aires")
 
 # === DATA ===
-
 def get_sheet_data():
     result = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
@@ -45,7 +44,6 @@ def get_sheet_data():
     return pd.DataFrame(rows, columns=header)
 
 # === HELPERS ===
-
 def is_si_mask(series):
     s = series.fillna("").astype(str).str.strip().str.lower()
 
@@ -73,7 +71,6 @@ def clean_value(val):
     return str(val).strip()
 
 # === CARD ===
-
 def render_card(row, tambien_en_html=""):
     title = clean_value(row.get("title"))
     snippet = clean_value(row.get("snippet"))
@@ -84,7 +81,9 @@ def render_card(row, tambien_en_html=""):
     sentiment = clean_value(row.get("sentiment"))
 
     return f"""
-    <div style='background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;margin:15px auto;width:70%;'>
+    <div style='background:#fff;border:1px solid #ddd;border-radius:8px;
+    padding:15px;margin:15px auto;max-width:{CONTAINER_WIDTH};'>
+        
         <span style='background:#ff2c55;color:#fff;padding:3px 8px;border-radius:5px;font-size:12px;'>{tag}</span>
         
         <h3><a href='{link}' style='color:#000;text-decoration:none;'>{title}</a></h3>
@@ -102,7 +101,6 @@ def render_card(row, tambien_en_html=""):
     """
 
 # === FILTER ===
-
 def filter_by_window(df, now):
     df["scraped_at_dt"] = pd.to_datetime(
         df["scraped_at"], format="%d/%m/%Y %H:%M", errors="coerce"
@@ -118,18 +116,17 @@ def filter_by_window(df, now):
     return df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)], label
 
 # === HTML ===
-
 def format_email_html(df, window_label):
 
     if df.empty:
         return f"<p>No news found for {window_label}</p>"
 
-    body = []
+    body = [f"<div style='background:#f5f5f5;padding:20px 0;'>"]
 
     # HEADER
     body.append(
-        "<div style='text-align:center;'>"
-        "<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' style='max-width:70%;'>"
+        f"<div style='max-width:{CONTAINER_WIDTH};margin:auto;'>"
+        f"<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' style='width:100%;'>"
         "</div>"
     )
 
@@ -138,11 +135,10 @@ def format_email_html(df, window_label):
 
     for country, df_country in df.groupby("country"):
 
-        # HEADER PAÍS (alineado con el header)
+        # HEADER PAÍS
         body.append(
-            f"<div style='max-width:700px;margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
-            f"<span style='color:#fff;font-size:22px;font-weight:800;'>"
-            f"TikTok — {country}</span>"
+            f"<div style='max-width:{CONTAINER_WIDTH};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
+            f"<span style='color:#fff;font-size:22px;font-weight:800;'>TikTok — {country}</span>"
             f"</div>"
         )
 
@@ -165,7 +161,6 @@ def format_email_html(df, window_label):
             tambien_en_html = ""
 
             if not secundarias.empty:
-
                 sec = secundarias.copy()
                 sec["tier"] = sec["tier"].fillna("").astype(str)
 
@@ -216,10 +211,11 @@ def format_email_html(df, window_label):
         for _, row in sin_tema.iterrows():
             body.append(render_card(row))
 
+    body.append("</div>")
+
     return "".join(body)
 
 # === EMAIL ===
-
 def send_email(subject, body):
     recipients = ["victoria.arrudi@publicalatam.com"]
 
@@ -233,7 +229,6 @@ def send_email(subject, body):
         server.sendmail(EMAIL_USER, recipients, msg.as_string())
 
 # === MAIN ===
-
 if __name__ == "__main__":
     now = datetime.now(TZ_ARG)
 
