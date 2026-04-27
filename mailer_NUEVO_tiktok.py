@@ -95,13 +95,16 @@ def render_card(row, tambien_en_html=""):
             </a>
         </h3>
         
-        <p>{snippet}</p>
-        
-        <p><b>Media:</b> {source} | <b>{tier}</b></p>
-        
-        <p><b>Sentiment:</b> {sentiment_badge(sentiment)}</p>
-        
-        <p><a href='{link}'>Leer nota →</a></p>
+        <p>
+            {snippet}
+            <a href='{link}' style='color:#1a73e8;text-decoration:none;font-weight:500;margin-left:5px;'>
+                Leer nota →
+            </a>
+        </p>
+
+<p><b>Media:</b> {source} | <b>{tier}</b></p>
+
+<p><b>Sentiment:</b> {sentiment_badge(sentiment)}</p>
 
         {tambien_en_html}
     </div>
