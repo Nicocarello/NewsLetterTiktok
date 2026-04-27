@@ -84,7 +84,7 @@ def render_card(row, tambien_en_html=""):
     sentiment = clean_value(row.get("sentiment"))
 
     return f"""
-    <div style='background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;margin:15px auto;width:65%;'>
+    <div style='background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;margin:15px auto;width:70%;'>
         <span style='background:#ff2c55;color:#fff;padding:3px 8px;border-radius:5px;font-size:12px;'>{tag}</span>
         
         <h3><a href='{link}' style='color:#000;text-decoration:none;'>{title}</a></h3>
@@ -126,14 +126,25 @@ def format_email_html(df, window_label):
 
     body = []
 
-    body.append("<div style='text-align:center;'><img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' style='max-width:70%;'></div>")
+    # HEADER
+    body.append(
+        "<div style='text-align:center;'>"
+        "<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' style='max-width:70%;'>"
+        "</div>"
+    )
 
     if "tema" not in df.columns:
         df["tema"] = ""
 
     for country, df_country in df.groupby("country"):
 
-        body.append(f"<h2 style='text-align:center;background:#000;color:#fff;padding:10px;'>TikTok — {country}</h2>")
+        # HEADER PAÍS (alineado con el header)
+        body.append(
+            f"<div style='max-width:700px;margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
+            f"<span style='color:#fff;font-size:22px;font-weight:800;'>"
+            f"TikTok — {country}</span>"
+            f"</div>"
+        )
 
         df_country = df_country.copy()
         df_country["tema"] = df_country["tema"].fillna("").str.strip()
