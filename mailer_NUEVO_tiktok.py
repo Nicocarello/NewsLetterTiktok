@@ -146,14 +146,53 @@ def format_email_html(df, window_label):
             body.append(render_card(principal))
 
             if not secundarias.empty:
-                medios = secundarias["source"].dropna().unique()[:3]
-                if len(medios):
-                    body.append(
-                        "<div style='width:65%;margin:-10px auto 15px;font-size:12px;'>"
-                        "<b>También en:</b><br>" +
-                        "<br>".join(medios) +
-                        "</div>"
-                    )
+
+                sec = secundarias.copy()
+            
+                # limpiar tier
+                sec["tier"] = sec["tier"].fillna("").astype(str)
+            
+                # agrupar por tier
+                tiers = {}
+            
+                for _, row_sec in sec.iterrows():
+                    tier = clean_value(row_sec.get("tier")) or "Otros"
+                    source = clean_value(row_sec.get("source") or row_sec.get("domain"))
+            
+                    if not source:
+                        continue
+            
+                    if tier not in tiers:
+                        tiers[tier] = []
+            
+                    if source not in tiers[tier]:
+                        tiers[tier].append(source)
+            
+                # ordenar tiers (1,2,3)
+                def tier_sort_key(t):
+                    try:
+                        return int(t.replace("Tier", "").strip())
+                    except:
+                        return 99
+            
+                tiers_sorted = sorted(tiers.items(), key=lambda x: tier_sort_key(x[0]))
+            
+                # HTML
+                bloque = (
+                    "<div style='width:65%;margin:0 auto 20px auto;font-size:12px;"
+                    "font-family:Helvetica,sans-serif;color:#444;'>"
+                    "<strong>También en:</strong><br>"
+                )
+            
+                for tier, medios in tiers_sorted:
+                    bloque += f"<div style='margin-top:5px;'><strong>{tier}:</strong><br>"
+                    for m in medios[:3]:
+                        bloque += f"{m}<br>"
+                    bloque += "</div>"
+            
+                bloque += "</div>"
+            
+                body.append(bloque)
 
         # individuales
         for _, row in sin_tema.iterrows():
