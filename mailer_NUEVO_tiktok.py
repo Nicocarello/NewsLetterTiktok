@@ -91,8 +91,7 @@ def render_card(row, tambien_en_html=""):
         
         <p>{snippet}</p>
         
-        <p><b>Media:</b> {source}</p>
-        <p><b>{tier}</b></p>
+        <p><b>Media:</b> {source} | <b>{tier}</b></p>
         
         <p><b>Sentiment:</b> {sentiment_badge(sentiment)}</p>
         
@@ -152,7 +151,6 @@ def format_email_html(df, window_label):
             principal = grupo.iloc[0]
             secundarias = grupo.iloc[1:]
 
-            # ---- TAMBIEN EN ----
             tambien_en_html = ""
 
             if not secundarias.empty:
@@ -165,6 +163,7 @@ def format_email_html(df, window_label):
                 for _, row_sec in sec.iterrows():
                     tier = clean_value(row_sec.get("tier")) or "Otros"
                     source = clean_value(row_sec.get("source") or row_sec.get("domain"))
+                    link = clean_value(row_sec.get("link"))
 
                     if not source:
                         continue
@@ -172,8 +171,7 @@ def format_email_html(df, window_label):
                     if tier not in tiers:
                         tiers[tier] = []
 
-                    if source not in tiers[tier]:
-                        tiers[tier].append(source)
+                    tiers[tier].append({"source": source, "link": link})
 
                 def tier_sort_key(t):
                     try:
@@ -186,9 +184,17 @@ def format_email_html(df, window_label):
                 tambien_en_html = "<div style='margin-top:10px;font-size:12px;color:#444;'>"
                 tambien_en_html += "<strong>También en:</strong><br>"
 
-                for tier, medios in tiers_sorted:
+                for tier, items in tiers_sorted:
                     tambien_en_html += f"<strong>{tier}:</strong> "
-                    tambien_en_html += " | ".join(medios[:3])
+
+                    links = []
+                    for item in items[:3]:
+                        if item["link"]:
+                            links.append(f"<a href='{item['link']}' target='_blank' style='color:#1a73e8;text-decoration:none'>{item['source']}</a>")
+                        else:
+                            links.append(item["source"])
+
+                    tambien_en_html += " | ".join(links)
                     tambien_en_html += "<br>"
 
                 tambien_en_html += "</div>"
