@@ -13,6 +13,7 @@ from email.mime.text import MIMEText
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 SPREADSHEET_ID = "19IqmQBolSHFvXJN5zNSEmUXw9ivqaxzymXg62S6QhkU"
 CONTAINER_WIDTH = "700px"
+CONTAINER_WIDTH2 = "800px"
 
 creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
@@ -125,7 +126,7 @@ def format_email_html(df, window_label):
 
     # HEADER
     body.append(
-        f"<div style='max-width:{CONTAINER_WIDTH};margin:auto;'>"
+        f"<div style='max-width:{CONTAINER_WIDTH2};margin:auto;'>"
         f"<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' style='width:100%;'>"
         "</div>"
     )
@@ -137,7 +138,7 @@ def format_email_html(df, window_label):
 
         # HEADER PAÍS
         body.append(
-            f"<div style='max-width:{CONTAINER_WIDTH};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
+            f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
             f"<span style='color:#fff;font-size:22px;font-weight:800;'>TikTok — {country}</span>"
             f"</div>"
         )
