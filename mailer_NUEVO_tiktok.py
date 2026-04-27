@@ -13,7 +13,7 @@ from email.mime.text import MIMEText
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 SPREADSHEET_ID = "19IqmQBolSHFvXJN5zNSEmUXw9ivqaxzymXg62S6QhkU"
 CONTAINER_WIDTH = "700px"
-CONTAINER_WIDTH2 = "800px"
+CONTAINER_WIDTH2 = "750px"
 
 creds_dict = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
