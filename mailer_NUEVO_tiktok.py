@@ -87,7 +87,11 @@ def render_card(row, tambien_en_html=""):
         
         <span style='background:#ff2c55;color:#fff;padding:3px 8px;border-radius:5px;font-size:12px;'>{tag}</span>
         
-        <h3><a href='{link}' style='color:#000;text-decoration:none;'>{title}</a></h3>
+        <h3 style='margin:5px 0 12px;font-size:20px;font-weight:800;letter-spacing:-0.3px;line-height:1.2;'>
+            <a href='{link}' style='color:#000;text-decoration:none;font-weight:800;'>
+                {title}
+            </a>
+        </h3>
         
         <p>{snippet}</p>
         
