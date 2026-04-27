@@ -119,18 +119,57 @@ def clean_value(val):
 
 
 def format_email_html(df, window_label, competencia_df=None):
-    if df.empty:
-        return f"<p>No news found for {window_label}.</p>"
-
-    body = []
-
-    # HEADER
-    body.append(
-        "<div style='text-align:center;'>"
-        "<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' style='max-width:70%;'>"
-        "</div>"
-    )
-
+    # AGRUPAR POR PAÍS
+    for country, df_country in df.groupby("country"):
+    
+        body.append(f"<h2 style='text-align:center;background:#000;color:#fff;padding:10px;'>TikTok — {country}</h2>")
+    
+        df_country = df_country.copy()
+    
+        # limpiar tema
+        df_country["tema"] = df_country["tema"].fillna("").astype(str).str.strip()
+    
+        # separar
+        con_tema = df_country[df_country["tema"] != ""]
+        sin_tema = df_country[df_country["tema"] == ""]
+    
+        # 🔵 1. AGRUPADOS (con tema)
+        for tema, grupo in con_tema.groupby("tema"):
+    
+            grupo = grupo.copy()
+    
+            grupo["prioridad_flag"] = grupo["prioridad"].fillna("").astype(str).str.strip() != ""
+    
+            grupo = grupo.sort_values(by=["prioridad_flag"], ascending=False)
+    
+            principal = grupo.iloc[0]
+            secundarias = grupo.iloc[1:]
+    
+            # ⭐ PRINCIPAL
+            body.append(render_card(principal))
+    
+            # 🟡 TAMBIÉN EN
+            if not secundarias.empty:
+                medios = []
+    
+                for _, row_sec in secundarias.head(3).iterrows():
+                    source = clean_value(row_sec.get("source") or row_sec.get("domain"))
+                    if source:
+                        medios.append(source)
+    
+                if medios:
+                    body.append(
+                        "<div style='width:65%;margin:-10px auto 15px auto;font-size:12px;'>"
+                        "<strong>También en:</strong><br>"
+                        + "<br>".join(medios) +
+                        "</div>"
+                    )
+    
+        # ⚪ 2. INDIVIDUALES (sin tema)
+        for _, row in sin_tema.iterrows():
+            body.append(render_card(row))
+        )
+    
     def render_card(row):
         title = clean_value(row.get("title"))
         snippet = clean_value(row.get("snippet"))
