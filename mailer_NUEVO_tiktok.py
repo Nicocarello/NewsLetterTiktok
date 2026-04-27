@@ -78,7 +78,7 @@ def render_card(row, tambien_en_html=""):
     source = clean_value(row.get("source") or row.get("domain"))
     tier = clean_value(row.get("tier"))
     link = clean_value(row.get("link"))
-    tag = clean_value(row.get("tag"))
+    tag = clean_value(row.get("tag")).upper()
     sentiment = clean_value(row.get("sentiment"))
 
     return f"""
