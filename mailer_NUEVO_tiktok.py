@@ -74,7 +74,7 @@ def clean_value(val):
 
 # === CARD ===
 
-def render_card(row):
+def render_card(row, tambien_en_html=""):
     title = clean_value(row.get("title"))
     snippet = clean_value(row.get("snippet"))
     source = clean_value(row.get("source") or row.get("domain"))
@@ -86,12 +86,19 @@ def render_card(row):
     return f"""
     <div style='background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;margin:15px auto;width:65%;'>
         <span style='background:#ff2c55;color:#fff;padding:3px 8px;border-radius:5px;font-size:12px;'>{tag}</span>
+        
         <h3><a href='{link}' style='color:#000;text-decoration:none;'>{title}</a></h3>
+        
         <p>{snippet}</p>
+        
         <p><b>Media:</b> {source}</p>
         <p><b>{tier}</b></p>
+        
         <p><b>Sentiment:</b> {sentiment_badge(sentiment)}</p>
+        
         <p><a href='{link}'>Leer nota →</a></p>
+
+        {tambien_en_html}
     </div>
     """
 
@@ -129,72 +136,66 @@ def format_email_html(df, window_label):
 
         body.append(f"<h2 style='text-align:center;background:#000;color:#fff;padding:10px;'>TikTok — {country}</h2>")
 
+        df_country = df_country.copy()
         df_country["tema"] = df_country["tema"].fillna("").str.strip()
 
         con_tema = df_country[df_country["tema"] != ""]
         sin_tema = df_country[df_country["tema"] == ""]
 
-        # agrupados
+        # AGRUPADOS
         for tema, grupo in con_tema.groupby("tema"):
 
+            grupo = grupo.copy()
             grupo["prioridad_flag"] = grupo.get("prioridad", "").astype(str).str.strip() != ""
             grupo = grupo.sort_values(by="prioridad_flag", ascending=False)
 
             principal = grupo.iloc[0]
             secundarias = grupo.iloc[1:]
 
-            body.append(render_card(principal))
+            # ---- TAMBIEN EN ----
+            tambien_en_html = ""
 
             if not secundarias.empty:
 
                 sec = secundarias.copy()
-            
-                # limpiar tier
                 sec["tier"] = sec["tier"].fillna("").astype(str)
-            
-                # agrupar por tier
+
                 tiers = {}
-            
+
                 for _, row_sec in sec.iterrows():
                     tier = clean_value(row_sec.get("tier")) or "Otros"
                     source = clean_value(row_sec.get("source") or row_sec.get("domain"))
-            
+
                     if not source:
                         continue
-            
+
                     if tier not in tiers:
                         tiers[tier] = []
-            
+
                     if source not in tiers[tier]:
                         tiers[tier].append(source)
-            
-                # ordenar tiers (1,2,3)
+
                 def tier_sort_key(t):
                     try:
                         return int(t.replace("Tier", "").strip())
                     except:
                         return 99
-            
-                tiers_sorted = sorted(tiers.items(), key=lambda x: tier_sort_key(x[0]))
-            
-                # HTML
-                bloque = (
-                    "<div style='width:65%;margin:0 auto 20px auto;font-size:12px;"
-                    "font-family:Helvetica,sans-serif;color:#444;'>"
-                    "<strong>También en:</strong><br>"
-                )
-            
-                for tier, medios in tiers_sorted:
-                    bloque += f"<div style='margin-top:5px;'><strong>{tier}:</strong><br>"
-                    for m in medios[:3]:
-                        bloque += f"{m}<br>"
-                    bloque += "</div>"
-            
-                bloque += "</div>"
-            
-                body.append(bloque)
 
-        # individuales
+                tiers_sorted = sorted(tiers.items(), key=lambda x: tier_sort_key(x[0]))
+
+                tambien_en_html = "<div style='margin-top:10px;font-size:12px;color:#444;'>"
+                tambien_en_html += "<strong>También en:</strong><br>"
+
+                for tier, medios in tiers_sorted:
+                    tambien_en_html += f"<strong>{tier}:</strong> "
+                    tambien_en_html += " | ".join(medios[:3])
+                    tambien_en_html += "<br>"
+
+                tambien_en_html += "</div>"
+
+            body.append(render_card(principal, tambien_en_html))
+
+        # INDIVIDUALES
         for _, row in sin_tema.iterrows():
             body.append(render_card(row))
 
@@ -226,6 +227,7 @@ if __name__ == "__main__":
         filtered = filtered[is_si_mask(filtered["enviar"])]
 
     body = format_email_html(filtered, window_label)
+
     subject = f"Newsletter TikTok ({window_label})"
 
     send_email(subject, body)
