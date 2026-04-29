@@ -102,15 +102,21 @@ def render_card(row, tambien_en_html=""):
     <div style='background:#fff;border:1px solid #ddd;border-radius:8px;
     padding:15px;margin:15px auto;max-width:{CONTAINER_WIDTH};'>
         
-        <span style='background:#ff2c55;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.3px;'>{tag}</span>
+        <span style='background:#ff2c55;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.3px;'>
+            {tag}
+        </span>
         
         <h3 style='margin:5px 0 12px;font-size:20px;font-weight:800;letter-spacing:-0.3px;line-height:1.2;'>
-            <a href='{link}' style='color:#000;text-decoration:none;font-weight:800;'>{title}</a>
+            <a href='{link}' style='color:#000;text-decoration:none;font-weight:800;'>
+                {title}
+            </a>
         </h3>
         
         <p>
             {snippet}
-            <a href='{link}' style='color:#1a73e8;text-decoration:none;font-weight:500;margin-left:5px;'>Leer nota →</a>
+            <a href='{link}' style='color:#1a73e8;text-decoration:none;font-weight:500;margin-left:5px;'>
+                Leer nota →
+            </a>
         </p>
 
         <p><b>Media:</b> {source} | <b>{tier}</b></p>
@@ -147,7 +153,6 @@ def format_email_html(df, window_label, competencia_df=None):
 
     body = [f"<div style='background:#f5f5f5;padding:20px 0;'>"]
 
-    # HEADER
     body.append(
         f"<div style='max-width:{CONTAINER_WIDTH2};margin:auto;'>"
         f"<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' style='width:100%;'>"
@@ -168,24 +173,33 @@ def format_email_html(df, window_label, competencia_df=None):
 
         for country, df_country in dataframe.groupby("country"):
 
-            flag = COUNTRY_FLAGS.get(country.strip(), "")
+            flag = COUNTRY_FLAGS.get(str(country).strip(), "")
 
             body.append(
                 f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
-                f"<span style='color:#fff;font-size:22px;font-weight:800;'>"
-                f"TikTok — {country} {flag}</span>"
+                f"<span style='color:#fff;font-size:22px;font-weight:800;'>TikTok — {country} {flag}</span>"
                 f"</div>"
             )
 
             df_country = df_country.copy()
-            df_country["tema"] = df_country.get("tema", "").fillna("").str.strip()
+
+            # FIX SEGURO
+            if "tema" not in df_country.columns:
+                df_country["tema"] = ""
+
+            df_country["tema"] = df_country["tema"].fillna("").astype(str).str.strip()
 
             con_tema = df_country[df_country["tema"] != ""]
             sin_tema = df_country[df_country["tema"] == ""]
 
             for tema, grupo in con_tema.groupby("tema"):
 
-                grupo["prioridad_flag"] = grupo.get("prioridad", "").astype(str).str.strip() != ""
+                grupo = grupo.copy()
+
+                if "prioridad" not in grupo.columns:
+                    grupo["prioridad"] = ""
+
+                grupo["prioridad_flag"] = grupo["prioridad"].fillna("").astype(str).str.strip() != ""
                 grupo = grupo.sort_values(by="prioridad_flag", ascending=False)
 
                 principal = grupo.iloc[0]
@@ -224,10 +238,7 @@ def format_email_html(df, window_label, competencia_df=None):
             for _, row in sin_tema.iterrows():
                 body.append(render_card(row))
 
-    # PRIMERO PROPIAS
     render_block(df)
-
-    # DESPUÉS COMPETENCIA
     if competencia_df is not None:
         render_block(competencia_df, "Competencia")
 
@@ -236,7 +247,7 @@ def format_email_html(df, window_label, competencia_df=None):
 
 # === EMAIL ===
 def send_email(subject, body):
-    recipients = ["victoria.arrudi@publicalatam.com", "luz@publicalatam.com", "sofia.szekasy@publicalatam.com"]
+    recipients = ["victoria.arrudi@publicalatam.com"]
 
     msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
