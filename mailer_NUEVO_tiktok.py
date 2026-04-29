@@ -172,12 +172,15 @@ def format_email_html(df, window_label, competencia_df=None):
             )
 
         for country, df_country in dataframe.groupby("country"):
-
+            
             flag = COUNTRY_FLAGS.get(str(country).strip(), "")
-
+            label = f"TikTok — {country} {flag}"
+            if titulo:
+                label = f"Competencia — {country} {flag}"
+            
             body.append(
                 f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
-                f"<span style='color:#fff;font-size:22px;font-weight:800;'>TikTok — {country} {flag}</span>"
+                f"<span style='color:#fff;font-size:22px;font-weight:800;'>{label}</span>"
                 f"</div>"
             )
 
@@ -240,7 +243,7 @@ def format_email_html(df, window_label, competencia_df=None):
 
     render_block(df)
     if competencia_df is not None:
-        render_block(competencia_df, "Competencia")
+        render_block(competencia_df)
 
     body.append("</div>")
     return "".join(body)
