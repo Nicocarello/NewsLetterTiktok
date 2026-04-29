@@ -125,6 +125,13 @@ def filter_by_window(df, now):
 
     return df[(df["scraped_at_dt"] >= start) & (df["scraped_at_dt"] < end)], label
 
+COUNTRY_FLAGS = {
+    "Argentina": "🇦🇷",
+    "Chile": "🇨🇱",
+    "Peru": "🇵🇪",
+    "Perú": "🇵🇪"
+}
+
 # === HTML ===
 def format_email_html(df, window_label):
 
@@ -146,9 +153,11 @@ def format_email_html(df, window_label):
     for country, df_country in df.groupby("country"):
 
         # HEADER PAÍS
+        flag = COUNTRY_FLAGS.get(country, "")
         body.append(
             f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
-            f"<span style='color:#fff;font-size:22px;font-weight:800;'>TikTok — {country}</span>"
+            f"<span style='color:#fff;font-size:22px;font-weight:800;'>"
+            f"TikTok — {country} {flag}</span>"
             f"</div>"
         )
 
