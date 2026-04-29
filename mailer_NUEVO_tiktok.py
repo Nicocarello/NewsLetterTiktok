@@ -227,7 +227,7 @@ def format_email_html(df, window_label):
 
 # === EMAIL ===
 def send_email(subject, body):
-    recipients = ["victoria.arrudi@publicalatam.com, luz@publicalatam.com, sofia.szekasy@publicalatam.com"]
+    recipients = ["victoria.arrudi@publicalatam.com", "luz@publicalatam.com", "sofia.szekasy@publicalatam.com"]
 
     msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
