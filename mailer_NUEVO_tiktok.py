@@ -38,7 +38,24 @@ def get_sheet_data():
 
     header = values[0]
     rows = values[1:]
+    n_cols = len(header)
+    rows = [(row + [""] * n_cols)[:n_cols] for row in rows]
 
+    return pd.DataFrame(rows, columns=header)
+
+
+def get_competencia_data():
+    result = sheet.values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range="Competencia!A:P"
+    ).execute()
+
+    values = result.get("values", [])
+    if not values:
+        return pd.DataFrame()
+
+    header = values[0]
+    rows = values[1:]
     n_cols = len(header)
     rows = [(row + [""] * n_cols)[:n_cols] for row in rows]
 
@@ -85,26 +102,19 @@ def render_card(row, tambien_en_html=""):
     <div style='background:#fff;border:1px solid #ddd;border-radius:8px;
     padding:15px;margin:15px auto;max-width:{CONTAINER_WIDTH};'>
         
-        <span style='background:#ff2c55;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.3px;'>
-            {tag}
-        </span>
+        <span style='background:#ff2c55;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.3px;'>{tag}</span>
         
         <h3 style='margin:5px 0 12px;font-size:20px;font-weight:800;letter-spacing:-0.3px;line-height:1.2;'>
-            <a href='{link}' style='color:#000;text-decoration:none;font-weight:800;'>
-                {title}
-            </a>
+            <a href='{link}' style='color:#000;text-decoration:none;font-weight:800;'>{title}</a>
         </h3>
         
         <p>
             {snippet}
-            <a href='{link}' style='color:#1a73e8;text-decoration:none;font-weight:500;margin-left:5px;'>
-                Leer nota →
-            </a>
+            <a href='{link}' style='color:#1a73e8;text-decoration:none;font-weight:500;margin-left:5px;'>Leer nota →</a>
         </p>
 
-<p><b>Media:</b> {source} | <b>{tier}</b></p>
-
-<p><b>Sentiment:</b> {sentiment_badge(sentiment)}</p>
+        <p><b>Media:</b> {source} | <b>{tier}</b></p>
+        <p><b>Sentiment:</b> {sentiment_badge(sentiment)}</p>
 
         {tambien_en_html}
     </div>
@@ -133,10 +143,7 @@ COUNTRY_FLAGS = {
 }
 
 # === HTML ===
-def format_email_html(df, window_label):
-
-    if df.empty:
-        return f"<p>No news found for {window_label}</p>"
+def format_email_html(df, window_label, competencia_df=None):
 
     body = [f"<div style='background:#f5f5f5;padding:20px 0;'>"]
 
@@ -147,91 +154,84 @@ def format_email_html(df, window_label):
         "</div>"
     )
 
-    if "tema" not in df.columns:
-        df["tema"] = ""
+    def render_block(dataframe, titulo=None):
 
-    for country, df_country in df.groupby("country"):
+        if dataframe.empty:
+            return
 
-        # HEADER PAÍS
-        flag = COUNTRY_FLAGS.get(country, "")
-        body.append(
-            f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
-            f"<span style='color:#fff;font-size:22px;font-weight:800;'>"
-            f"TikTok — {country} {flag}</span>"
-            f"</div>"
-        )
+        if titulo:
+            body.append(
+                f"<div style='max-width:{CONTAINER_WIDTH2};margin:30px auto 10px auto;background:#111;padding:10px 0;text-align:center;'>"
+                f"<span style='color:#fff;font-size:20px;font-weight:800;'>{titulo}</span>"
+                f"</div>"
+            )
 
-        df_country = df_country.copy()
-        df_country["tema"] = df_country["tema"].fillna("").str.strip()
+        for country, df_country in dataframe.groupby("country"):
 
-        con_tema = df_country[df_country["tema"] != ""]
-        sin_tema = df_country[df_country["tema"] == ""]
+            flag = COUNTRY_FLAGS.get(country.strip(), "")
 
-        # AGRUPADOS
-        for tema, grupo in con_tema.groupby("tema"):
+            body.append(
+                f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
+                f"<span style='color:#fff;font-size:22px;font-weight:800;'>"
+                f"TikTok — {country} {flag}</span>"
+                f"</div>"
+            )
 
-            grupo = grupo.copy()
-            grupo["prioridad_flag"] = grupo.get("prioridad", "").astype(str).str.strip() != ""
-            grupo = grupo.sort_values(by="prioridad_flag", ascending=False)
+            df_country = df_country.copy()
+            df_country["tema"] = df_country.get("tema", "").fillna("").str.strip()
 
-            principal = grupo.iloc[0]
-            secundarias = grupo.iloc[1:]
+            con_tema = df_country[df_country["tema"] != ""]
+            sin_tema = df_country[df_country["tema"] == ""]
 
-            tambien_en_html = ""
+            for tema, grupo in con_tema.groupby("tema"):
 
-            if not secundarias.empty:
-                sec = secundarias.copy()
-                sec["tier"] = sec["tier"].fillna("").astype(str)
+                grupo["prioridad_flag"] = grupo.get("prioridad", "").astype(str).str.strip() != ""
+                grupo = grupo.sort_values(by="prioridad_flag", ascending=False)
 
-                tiers = {}
+                principal = grupo.iloc[0]
+                secundarias = grupo.iloc[1:]
 
-                for _, row_sec in sec.iterrows():
-                    tier = clean_value(row_sec.get("tier")) or "Otros"
-                    source = clean_value(row_sec.get("source") or row_sec.get("domain"))
-                    link = clean_value(row_sec.get("link"))
+                tambien_en_html = ""
 
-                    if not source:
-                        continue
+                if not secundarias.empty:
+                    sec = secundarias.copy()
+                    sec["tier"] = sec["tier"].fillna("").astype(str)
 
-                    if tier not in tiers:
-                        tiers[tier] = []
+                    tiers = {}
 
-                    tiers[tier].append({"source": source, "link": link})
+                    for _, row_sec in sec.iterrows():
+                        tier = clean_value(row_sec.get("tier"))
+                        source = clean_value(row_sec.get("source"))
+                        link = clean_value(row_sec.get("link"))
 
-                def tier_sort_key(t):
-                    try:
-                        return int(t.replace("Tier", "").strip())
-                    except:
-                        return 99
+                        tiers.setdefault(tier, []).append((source, link))
 
-                tiers_sorted = sorted(tiers.items(), key=lambda x: tier_sort_key(x[0]))
+                    tambien_en_html = "<div style='margin-top:10px;font-size:13px;color:#000;'>"
+                    tambien_en_html += "<strong>También en:</strong><br>"
 
-                tambien_en_html = "<div style='margin-top:10px;font-size:13px;color:#000;'>"
-                tambien_en_html += "<strong style='color:#000;'>También en:</strong><br>"
+                    for tier, items in sorted(tiers.items()):
+                        tambien_en_html += f"<strong>{tier}:</strong> "
+                        tambien_en_html += " | ".join(
+                            f"<a href='{l}' target='_blank'>{s}</a>" if l else s
+                            for s, l in items[:3]
+                        )
+                        tambien_en_html += "<br>"
 
-                for tier, items in tiers_sorted:
-                    tambien_en_html += f"<strong>{tier}:</strong> "
+                    tambien_en_html += "</div>"
 
-                    links = []
-                    for item in items[:3]:
-                        if item["link"]:
-                            links.append(f"<a href='{item['link']}' target='_blank' style='color:#1a73e8;text-decoration:none'>{item['source']}</a>")
-                        else:
-                            links.append(item["source"])
+                body.append(render_card(principal, tambien_en_html))
 
-                    tambien_en_html += " | ".join(links)
-                    tambien_en_html += "<br>"
+            for _, row in sin_tema.iterrows():
+                body.append(render_card(row))
 
-                tambien_en_html += "</div>"
+    # PRIMERO PROPIAS
+    render_block(df)
 
-            body.append(render_card(principal, tambien_en_html))
-
-        # INDIVIDUALES
-        for _, row in sin_tema.iterrows():
-            body.append(render_card(row))
+    # DESPUÉS COMPETENCIA
+    if competencia_df is not None:
+        render_block(competencia_df, "Competencia")
 
     body.append("</div>")
-
     return "".join(body)
 
 # === EMAIL ===
@@ -252,12 +252,18 @@ if __name__ == "__main__":
     now = datetime.now(TZ_ARG)
 
     df = get_sheet_data()
+    competencia_df = get_competencia_data()
+
     filtered, window_label = filter_by_window(df, now)
+    comp_filtered, _ = filter_by_window(competencia_df, now)
 
     if "enviar" in filtered.columns:
         filtered = filtered[is_si_mask(filtered["enviar"])]
 
-    body = format_email_html(filtered, window_label)
+    if "enviar" in comp_filtered.columns:
+        comp_filtered = comp_filtered[is_si_mask(comp_filtered["enviar"])]
+
+    body = format_email_html(filtered, window_label, comp_filtered)
 
     subject = f"Newsletter TikTok ({window_label})"
 
