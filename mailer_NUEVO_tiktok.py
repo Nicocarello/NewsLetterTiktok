@@ -197,8 +197,8 @@ def format_email_html(df, window_label):
 
                 tiers_sorted = sorted(tiers.items(), key=lambda x: tier_sort_key(x[0]))
 
-                tambien_en_html = "<div style='margin-top:10px;font-size:12px;color:#444;'>"
-                tambien_en_html += "<strong>También en:</strong><br>"
+                tambien_en_html = "<div style='margin-top:10px;font-size:12px;color:#000;'>"
+                tambien_en_html += "<strong style='color:#000;'>También en:</strong><br>"
 
                 for tier, items in tiers_sorted:
                     tambien_en_html += f"<strong>{tier}:</strong> "
