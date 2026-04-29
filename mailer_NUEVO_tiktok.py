@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 
 # === CONFIG ===
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-SPREADSHEET_ID = "19IqmQBolSHFvXJN5zNSEmUXw9ivqaxzymXg62S6QhkU"
+SPREADSHEET_ID = "1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14"
 CONTAINER_WIDTH = "700px"
 CONTAINER_WIDTH2 = "750px"
 
@@ -227,7 +227,7 @@ def format_email_html(df, window_label):
 
 # === EMAIL ===
 def send_email(subject, body):
-    recipients = ["victoria.arrudi@publicalatam.com"]
+    recipients = ["victoria.arrudi@publicalatam.com, luz@publicalatam.com, sofia.szekasy@publicalatam.com"]
 
     msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
