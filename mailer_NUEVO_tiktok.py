@@ -27,29 +27,13 @@ TZ_ARG = pytz.timezone("America/Argentina/Buenos_Aires")
 
 # === DATA ===
 def get_sheet_data():
-    result = sheet.values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range="2026!A:P"
-    ).execute()
-
-    values = result.get("values", [])
-    if not values:
-        return pd.DataFrame()
-
-    header = values[0]
-    rows = values[1:]
-    n_cols = len(header)
-    rows = [(row + [""] * n_cols)[:n_cols] for row in rows]
-
-    return pd.DataFrame(rows, columns=header)
-
+    return get_data_from_range("2026!A:P")
 
 def get_competencia_data():
-    result = sheet.values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range="Competencia!A:P"
-    ).execute()
+    return get_data_from_range("Competencia!A:P")
 
+def get_data_from_range(rng):
+    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=rng).execute()
     values = result.get("values", [])
     if not values:
         return pd.DataFrame()
@@ -70,7 +54,6 @@ def is_si_mask(series):
 
     return s.apply(norm) == "si"
 
-
 def sentiment_badge(label):
     lab = (label or "").upper()
     if "POSITIVO" in lab:
@@ -81,7 +64,6 @@ def sentiment_badge(label):
         color = "#616161"
 
     return f"<span style='background:{color};color:#fff;padding:2px 8px;border-radius:12px;font-size:12px;'>{lab}</span>"
-
 
 def clean_value(val):
     if val is None or pd.isna(val):
@@ -102,21 +84,15 @@ def render_card(row, tambien_en_html=""):
     <div style='background:#fff;border:1px solid #ddd;border-radius:8px;
     padding:15px;margin:15px auto;max-width:{CONTAINER_WIDTH};'>
         
-        <span style='background:#ff2c55;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.3px;'>
-            {tag}
-        </span>
+        <span style='background:#ff2c55;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:0.3px;'>{tag}</span>
         
-        <h3 style='margin:5px 0 12px;font-size:20px;font-weight:800;letter-spacing:-0.3px;line-height:1.2;'>
-            <a href='{link}' style='color:#000;text-decoration:none;font-weight:800;'>
-                {title}
-            </a>
+        <h3 style='margin:5px 0 12px;font-size:20px;font-weight:800;line-height:1.2;'>
+            <a href='{link}' style='color:#000;text-decoration:none;font-weight:800;'>{title}</a>
         </h3>
         
         <p>
             {snippet}
-            <a href='{link}' style='color:#1a73e8;text-decoration:none;font-weight:500;margin-left:5px;'>
-                Leer nota →
-            </a>
+            <a href='{link}' style='color:#1a73e8;text-decoration:none;font-weight:500;margin-left:5px;'>Leer nota →</a>
         </p>
 
         <p><b>Media:</b> {source} | <b>{tier}</b></p>
@@ -153,31 +129,27 @@ def format_email_html(df, window_label, competencia_df=None):
 
     body = [f"<div style='background:#f5f5f5;padding:20px 0;'>"]
 
+    # HEADER
     body.append(
         f"<div style='max-width:{CONTAINER_WIDTH2};margin:auto;'>"
         f"<img src='https://mcusercontent.com/624d462ddab9885481536fb77/images/f6eec52f-27c8-ee63-94dc-7a050407d770.png' style='width:100%;'>"
         "</div>"
     )
 
-    def render_block(dataframe, titulo=None):
+    def render_block(dataframe, is_competencia=False):
 
         if dataframe.empty:
             return
 
-        if titulo:
-            body.append(
-                f"<div style='max-width:{CONTAINER_WIDTH2};margin:30px auto 10px auto;background:#111;padding:10px 0;text-align:center;'>"
-                f"<span style='color:#fff;font-size:20px;font-weight:800;'>{titulo}</span>"
-                f"</div>"
-            )
-
         for country, df_country in dataframe.groupby("country"):
-            
+
             flag = COUNTRY_FLAGS.get(str(country).strip(), "")
-            label = f"TikTok — {country} {flag}"
-            if titulo:
+
+            if is_competencia:
                 label = f"Competencia — {country} {flag}"
-            
+            else:
+                label = f"TikTok — {country} {flag}"
+
             body.append(
                 f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
                 f"<span style='color:#fff;font-size:22px;font-weight:800;'>{label}</span>"
@@ -186,7 +158,6 @@ def format_email_html(df, window_label, competencia_df=None):
 
             df_country = df_country.copy()
 
-            # FIX SEGURO
             if "tema" not in df_country.columns:
                 df_country["tema"] = ""
 
@@ -241,9 +212,10 @@ def format_email_html(df, window_label, competencia_df=None):
             for _, row in sin_tema.iterrows():
                 body.append(render_card(row))
 
-    render_block(df)
+    # bloques
+    render_block(df, is_competencia=False)
     if competencia_df is not None:
-        render_block(competencia_df)
+        render_block(competencia_df, is_competencia=True)
 
     body.append("</div>")
     return "".join(body)
@@ -266,10 +238,10 @@ if __name__ == "__main__":
     now = datetime.now(TZ_ARG)
 
     df = get_sheet_data()
-    competencia_df = get_competencia_data()
+    comp_df = get_competencia_data()
 
     filtered, window_label = filter_by_window(df, now)
-    comp_filtered, _ = filter_by_window(competencia_df, now)
+    comp_filtered, _ = filter_by_window(comp_df, now)
 
     if "enviar" in filtered.columns:
         filtered = filtered[is_si_mask(filtered["enviar"])]
