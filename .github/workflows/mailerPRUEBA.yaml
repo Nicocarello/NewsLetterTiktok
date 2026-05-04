@@ -2,7 +2,7 @@ name: Send TIKTOK Emails PRUEBA
 
 on:
  schedule:
-   - cron: "0 11 * * 1-5"
+   - cron: "0 16 * * 1-5"
  workflow_dispatch:
 
 jobs:
