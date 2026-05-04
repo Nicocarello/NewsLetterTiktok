@@ -55,7 +55,7 @@ if not APIFY_TOKEN:
 COUNTRIES = [c.strip() for c in os.getenv("COUNTRIES", "ar,cl,pe").split(",") if c.strip()]
 QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
-    "tik-tok,tiktok,tiktok suicidio,tiktok grooming,tiktok armas,tiktok drogas,tiktok violacion,tiktok delincuentes,tiktok amenaza,tiktok amenazo,tiktok estafa"
+    "tik-tok,tiktok,tiktok suicidio,tiktok grooming,tiktok amenaza,tiktok estafa"
 ).split(",") if q.strip()]
 
 try:
@@ -143,7 +143,7 @@ def normalize_link(url):
     if not url:
         return ''
     url = str(url).strip()
-    url = re.sub(r'(/amp/?|=amp)$', '', url)   # quita /amp o /amp/ o =amp al final
+    url = re.sub(r'(/amp/?|=amp|\.amp)$', '', url)   # quita /amp o /amp/ o =amp al final
     return url
 
 # Optional helper
