@@ -1,3 +1,4 @@
+'''
 name: Run Elsztain Scraper
 
 on:
@@ -21,6 +22,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run scraper_elsztain.py
+'''      
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
