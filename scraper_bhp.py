@@ -240,6 +240,19 @@ def contains_any_monitoring_keyword(text):
         return False
     return any(term in t for term in MONITORING_TERMS_NORMALIZED)
 
+EXCLUDED_TERMS = [
+    "Benjamin Vicuña",
+    "Benjamín Vicuña",
+    "Benjamin Vicuña",  # por si llega sin tilde
+]
+
+EXCLUDED_TERMS_NORMALIZED = [normalize_for_match(t) for t in EXCLUDED_TERMS]
+
+def contains_any_excluded_keyword(text):
+    t = normalize_for_match(text)
+    if not t:
+        return False
+    return any(term in t for term in EXCLUDED_TERMS_NORMALIZED)
 # -------------------------------------------------
 # CATEGORIES DEL CLIPPING
 # -------------------------------------------------
@@ -715,7 +728,10 @@ combined_text = (
     safe_series(final_df, "article_body")
 )
 
-mask = combined_text.apply(contains_any_monitoring_keyword)
+mask_monitoring = combined_text.apply(contains_any_monitoring_keyword)
+mask_excluded = ~combined_text.apply(contains_any_excluded_keyword)
+
+mask = mask_monitoring & mask_excluded
 
 before_tot = len(final_df)
 final_df = final_df[mask].copy()
