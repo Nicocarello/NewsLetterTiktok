@@ -656,106 +656,79 @@ header = ['date_utc','country','title','link','domain','source','snippet','tag',
 final_df = final_df.reindex(columns=header, fill_value='')
 final_df = final_df.drop_duplicates(subset='link')
 
-# --- Read existing sheet and combine ---
+
 SHEET_RANGE = "Competencia!A:J"
-try:
-    result = sheet_service.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
-    values = result.get("values", [])
-    logging.info("Leídas %d filas desde la hoja (incl header si existía).", len(values))
-except HttpError as e:
-    logging.exception("Failed to read existing sheet: %s", e)
+
+TARGETS = [SPREADSHEET_ID]
+if SECOND_SPREADSHEET_ID and SECOND_SPREADSHEET_ID != SPREADSHEET_ID:
+    TARGETS.append(SECOND_SPREADSHEET_ID)
+
+def df_to_values(df):
+    df = df.copy()
+
+    for col in header:
+        if col not in df.columns:
+            df[col] = ''
+
+    df = df.reindex(columns=header, fill_value='')
+    df = df.replace([np.nan, pd.NaT, None], '').replace([np.inf, -np.inf], '')
+    df['link'] = df['link'].astype(str).apply(normalize_link)
+    df = df.drop_duplicates(subset='link')
+    df = df.drop_duplicates(subset=['title', 'snippet'])
+
     values = []
-except Exception as e:
-    logging.exception("Failed to read existing sheet: %s", e)
-    values = []
+    for row in df[header].values.tolist():
+        cleaned = []
+        for cell in row:
+            if isinstance(cell, (np.integer,)):
+                val = int(cell)
+            elif isinstance(cell, (np.floating,)):
+                fv = float(cell)
+                val = '' if math.isnan(fv) or math.isinf(fv) else fv
+            elif isinstance(cell, (np.bool_, bool)):
+                val = bool(cell)
+            elif isinstance(cell, pd.Timestamp):
+                val = '' if pd.isna(cell) else cell.isoformat()
+            else:
+                val = '' if cell is None else str(cell)
 
-if values:
-    try:
-        existing_df = pd.DataFrame(values[1:], columns=values[0]).reindex(columns=header, fill_value='')
-    except Exception as e:
-        logging.exception("Error parsing existing sheet values into DataFrame: %s", e)
-        existing_df = pd.DataFrame(columns=header)
-else:
-    existing_df = pd.DataFrame(columns=header)
+            if isinstance(val, str) and val.lower() in ('nan', 'nat', 'none'):
+                val = ''
+            cleaned.append(val)
 
-combined_df = pd.concat([existing_df, final_df], ignore_index=True)
-if 'link' in combined_df.columns:
-    combined_df.drop_duplicates(subset=["link"], inplace=True)
-combined_df = combined_df.reset_index(drop=True)
+        values.append(cleaned)
 
-# --- SANITIZE data before writing to Sheets ---
-combined_df = combined_df.replace([np.nan, pd.NaT, None], '').replace([np.inf, -np.inf], '')
+    return values
 
-def sanitize_cell(cell):
-    if isinstance(cell, (np.integer,)):
-        return int(cell)
-    if isinstance(cell, (np.floating,)):
-        fv = float(cell)
-        if math.isnan(fv) or math.isinf(fv):
-            return ''
-        return fv
-    if isinstance(cell, (np.bool_, bool)):
-        return bool(cell)
-    try:
-        import pandas as _pd
-        if isinstance(cell, _pd.Timestamp):
-            if pd.isna(cell):
-                return ''
-            return cell.isoformat()
-    except Exception:
-        pass
-    s = '' if cell is None else str(cell)
-    if s.lower() in ('nan', 'nat', 'none'):
-        return ''
-    return s
+def append_rows_to_sheet(spreadsheet_id, rows):
+    if not rows:
+        logging.info("[%s] No rows to append.", spreadsheet_id)
+        return 0
 
-values_rows = []
-for row in combined_df[header].values.tolist():
-    sanitized_row = [sanitize_cell(cell) for cell in row]
-    values_rows.append([str(cell) for cell in sanitized_row])
-
-body_values = [header] + values_rows
-
-def is_json_serializable(obj):
-    try:
-        json.dumps(obj)
-        return True
-    except Exception:
-        return False
-
-bad_cells = []
-for r_idx, row in enumerate(body_values):
-    for c_idx, cell in enumerate(row):
-        if not is_json_serializable(cell):
-            bad_cells.append((r_idx, c_idx, type(cell).__name__, repr(cell)))
-if bad_cells:
-    logging.warning("Found unserializable cells (row_index, col_index, type, repr). Showing up to 20 entries:")
-    for entry in bad_cells[:20]:
-        logging.warning(entry)
-
-# --- Write to sheet with diagnostics on HttpError ---
-try:
-    logging.info("Clearing target range %s ...", SHEET_RANGE)
-    sheet_service.values().clear(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
-    logging.info("Updating sheet con %d filas (incl header)...", len(body_values))
-    sheet_service.values().update(
-        spreadsheetId=SPREADSHEET_ID,
-        range="Competencia!A1",
+    result = sheet_service.values().append(
+        spreadsheetId=spreadsheet_id,
+        range=SHEET_RANGE,
         valueInputOption="RAW",
-        body={"values": body_values}
+        insertDataOption="INSERT_ROWS",
+        body={"values": rows}
     ).execute()
-    logging.info("✅ Hoja actualizada sin duplicados. Filas escritas: %d", len(body_values)-1)
-except HttpError as e:
-    logging.exception("HttpError escribiendo en Sheets: %s", e)
-    sample_preview = {
-        "first_rows": body_values[:5],
-        "rows_count": len(body_values),
-        "bad_cells_count": len(bad_cells),
-    }
-    logging.error("Payload preview (first 5 rows): %s", json.dumps(sample_preview, ensure_ascii=False, indent=2))
-    raise
-except Exception as e:
-    logging.exception("Unexpected error writing to Sheets: %s", e)
-    raise
 
-logging.info("Script finished correctamente.")
+    updated = result.get("updates", {}).get("updatedRows", len(rows))
+    logging.info("[%s] Appended %d rows.", spreadsheet_id, updated)
+    return updated
+
+values_to_append = df_to_values(final_df)
+
+total_by_sheet = {}
+for sheet_id in TARGETS:
+    try:
+        total_by_sheet[sheet_id] = append_rows_to_sheet(sheet_id, values_to_append)
+    except HttpError as e:
+        logging.exception("[%s] Failed appending to sheet: %s", sheet_id, e)
+        total_by_sheet[sheet_id] = 0
+    except Exception as e:
+        logging.exception("[%s] Failed appending to sheet: %s", sheet_id, e)
+        total_by_sheet[sheet_id] = 0
+
+logging.info("✅ Append completed: %s", total_by_sheet)
+logging.info("Script finished successfully.")
