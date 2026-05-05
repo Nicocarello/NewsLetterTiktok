@@ -68,8 +68,8 @@ QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
     "BHP Argentina,BHP Group Argentina,Proyecto Vicuña,"
     "Filo del Sol Argentina,Lundin Mining,Vicuña bhp"
-    "cobre Argentina,minería Argentina,RIGI minería,Vicuña corp,"
-    "San Juan minería,Mendoza minería,CAEM Argentina,Arminera Argentina,BHP,Filo Corp"
+    "minería Argentina,RIGI minería,Vicuña corp,"
+    "San Juan minería,Mendoza minería,CAEM Argentina,BHP,Filo Corp"
 
 ).split(",") if q.strip()]
 
