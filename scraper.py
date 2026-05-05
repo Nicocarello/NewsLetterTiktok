@@ -635,7 +635,7 @@ final_df = final_df.drop_duplicates(subset='link')
 final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
 # ---------------------------
-# WRITE TO BOTH SHEETS IN ONE PASS PER SHEET
+# APPEND TO BOTH SHEETS BELOW EXISTING ROWS
 # ---------------------------
 SHEET_RANGE = "2026!A:K"
 
@@ -656,7 +656,7 @@ def df_to_values(df):
     df = df.drop_duplicates(subset='link')
     df = df.drop_duplicates(subset=['title', 'snippet'])
 
-    values = [header]
+    values = []
     for row in df[header].values.tolist():
         cleaned = []
         for cell in row:
@@ -664,10 +664,7 @@ def df_to_values(df):
                 val = int(cell)
             elif isinstance(cell, (np.floating,)):
                 fv = float(cell)
-                if math.isnan(fv) or math.isinf(fv):
-                    val = ''
-                else:
-                    val = fv
+                val = '' if math.isnan(fv) or math.isinf(fv) else fv
             elif isinstance(cell, (np.bool_, bool)):
                 val = bool(cell)
             elif isinstance(cell, pd.Timestamp):
@@ -678,39 +675,40 @@ def df_to_values(df):
             if isinstance(val, str) and val.lower() in ('nan', 'nat', 'none'):
                 val = ''
             cleaned.append(val)
+
         values.append(cleaned)
 
     return values
 
-def clear_and_write_sheet(spreadsheet_id, values):
-    sheet_service.values().clear(
-        spreadsheetId=spreadsheet_id,
-        range=SHEET_RANGE
-    ).execute()
+def append_rows_to_sheet(spreadsheet_id, rows):
+    if not rows:
+        logging.info("[%s] No rows to append.", spreadsheet_id)
+        return 0
 
-    sheet_service.values().update(
+    result = sheet_service.values().append(
         spreadsheetId=spreadsheet_id,
-        range="2026!A1",
+        range=SHEET_RANGE,
         valueInputOption="RAW",
-        body={"values": values}
+        insertDataOption="INSERT_ROWS",
+        body={"values": rows}
     ).execute()
 
-    logging.info("[%s] Written %d rows in one operation.", spreadsheet_id, max(0, len(values) - 1))
+    updated = result.get("updates", {}).get("updatedRows", len(rows))
+    logging.info("[%s] Appended %d rows.", spreadsheet_id, updated)
+    return updated
 
-values_to_write = df_to_values(final_df)
+values_to_append = df_to_values(final_df)
 
 total_by_sheet = {}
-
 for sheet_id in TARGETS:
     try:
-        clear_and_write_sheet(sheet_id, values_to_write)
-        total_by_sheet[sheet_id] = len(values_to_write) - 1
+        total_by_sheet[sheet_id] = append_rows_to_sheet(sheet_id, values_to_append)
     except HttpError as e:
-        logging.exception("[%s] Failed writing sheet (sanitized): %s", sheet_id, e)
+        logging.exception("[%s] Failed appending to sheet: %s", sheet_id, e)
         total_by_sheet[sheet_id] = 0
     except Exception as e:
-        logging.exception("[%s] Failed writing sheet (sanitized): %s", sheet_id, e)
+        logging.exception("[%s] Failed appending to sheet: %s", sheet_id, e)
         total_by_sheet[sheet_id] = 0
 
-logging.info("✅ Sync completed: %s", total_by_sheet)
+logging.info("✅ Append completed: %s", total_by_sheet)
 logging.info("Script finished successfully.")
