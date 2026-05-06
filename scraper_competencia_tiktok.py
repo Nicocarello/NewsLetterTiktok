@@ -136,7 +136,7 @@ final_df = final_df.reindex(columns=HEADER, fill_value='')
 # --- READ EXISTING ---
 values = sheet_service.values().get(
     spreadsheetId=SPREADSHEET_ID,
-    range="Competencia!A:J"
+    range="Competencia!A:L"
 ).execute().get("values", [])
 
 existing_links = set()
