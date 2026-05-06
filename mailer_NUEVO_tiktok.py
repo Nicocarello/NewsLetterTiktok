@@ -165,7 +165,6 @@ def format_email_html(df, window_label, competencia_df=None):
     )
 
     def render_block(dataframe, is_competencia=False):
-
         if dataframe.empty:
             return
     
@@ -185,47 +184,50 @@ def format_email_html(df, window_label, competencia_df=None):
             )
     
             df_country = df_country.copy()
-            # df_country = sort_news(df_country)   # <- ACÁ
     
             if "tema" not in df_country.columns:
                 df_country["tema"] = ""
     
             df_country["tema"] = df_country["tema"].fillna("").astype(str).str.strip()
     
-            con_tema = df_country[df_country["tema"] != ""]
-            sin_tema = df_country[df_country["tema"] == ""]
+            con_tema = df_country[df_country["tema"] != ""].copy()
+            sin_tema = df_country[df_country["tema"] == ""].copy()
     
-            for tema, grupo in con_tema.groupby("tema"):
-
+            if is_competencia:
+                con_tema = sort_news(con_tema)
+                sin_tema = sort_news(sin_tema)
+    
+            for tema, grupo in con_tema.groupby("tema", sort=False):
+    
                 grupo = grupo.copy()
-
+    
                 if "prioridad" not in grupo.columns:
                     grupo["prioridad"] = ""
-
+    
                 grupo["prioridad_flag"] = grupo["prioridad"].fillna("").astype(str).str.strip() != ""
                 grupo = grupo.sort_values(by="prioridad_flag", ascending=False)
-
+    
                 principal = grupo.iloc[0]
                 secundarias = grupo.iloc[1:]
-
+    
                 tambien_en_html = ""
-
+    
                 if not secundarias.empty:
                     sec = secundarias.copy()
                     sec["tier"] = sec["tier"].fillna("").astype(str)
-
+    
                     tiers = {}
-
+    
                     for _, row_sec in sec.iterrows():
                         tier = clean_value(row_sec.get("tier"))
                         source = clean_value(row_sec.get("source"))
                         link = clean_value(row_sec.get("link"))
-
+    
                         tiers.setdefault(tier, []).append((source, link))
-
+    
                     tambien_en_html = "<div style='margin-top:10px;font-size:13px;color:#000;'>"
                     tambien_en_html += "<strong>También en:</strong><br>"
-
+    
                     for tier, items in sorted(tiers.items()):
                         tambien_en_html += f"<strong>{tier}:</strong> "
                         tambien_en_html += " | ".join(
@@ -233,21 +235,26 @@ def format_email_html(df, window_label, competencia_df=None):
                             for s, l in items[:3]
                         )
                         tambien_en_html += "<br>"
-
+    
                     tambien_en_html += "</div>"
-
-                body.append(render_card(principal, tambien_en_html))
-
+    
+                body.append(
+                    render_card(
+                        principal,
+                        tambien_en_html,
+                        mostrar_tag=is_competencia,
+                        mostrar_sentiment=not is_competencia
+                    )
+                )
+    
             for _, row in sin_tema.iterrows():
-                body.append(render_card(row))
-
-    # bloques
-    render_block(df, is_competencia=False)
-    if competencia_df is not None:
-        render_block(competencia_df, is_competencia=True)
-
-    body.append("</div>")
-    return "".join(body)
+                body.append(
+                    render_card(
+                        row,
+                        mostrar_tag=is_competencia,
+                        mostrar_sentiment=not is_competencia
+                    )
+                )
 
 # === EMAIL ===
 def send_email(subject, body):
