@@ -27,7 +27,7 @@ if not GOOGLE_CREDENTIALS_ENV or not APIFY_TOKEN:
     sys.exit(1)
 
 COUNTRIES = os.getenv("COUNTRIES", "ar,cl,pe").split(",")
-QUERIES = os.getenv("QUERIES", "youtube,google,instagram,facebook").split(",")
+QUERIES = os.getenv("QUERIES", "youtube,instagram,facebook").split(",")
 
 MAX_ITEMS = int(os.getenv("MAX_ITEMS", "500"))
 TIME_PERIOD = os.getenv("TIME_PERIOD", "last_day")
@@ -106,7 +106,7 @@ final_df.drop_duplicates(subset="link", inplace=True)
 final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
 
 # --- FILTER ---
-pattern = re.compile(r"(youtube|google|instagram|facebook|roblox)", re.IGNORECASE)
+pattern = re.compile(r"(youtube|instagram|facebook|roblox)", re.IGNORECASE)
 
 title_col = final_df['title'].astype(str) if 'title' in final_df.columns else pd.Series([''] * len(final_df))
 snippet_col = final_df['snippet'].astype(str) if 'snippet' in final_df.columns else pd.Series([''] * len(final_df))
