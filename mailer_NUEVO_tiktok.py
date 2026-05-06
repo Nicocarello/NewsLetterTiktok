@@ -71,26 +71,32 @@ def clean_value(val):
     return str(val).strip()
 
 def sort_news(dfpart):
-        dfpart = dfpart.copy()
-    
-        # crear columna si no existe
-        dfpart["sentiment_norm"] = (
-            dfpart.get("sentiment", "")
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
-    
-        sent_order = {
-            "POSITIVO": 0,
-            "POSITIVO (PROACTIVO)": 0,
-            "NEUTRO": 1,
-            "NEGATIVO": 2
-        }
-    
-        dfpart["sent_order"] = dfpart["sentiment_norm"].map(sent_order).fillna(99)
-    
-        return dfpart.sort_values("sent_order", ascending=True)
+    dfpart = dfpart.copy()
+
+    if "sentiment" not in dfpart.columns:
+        dfpart["sentiment"] = ""
+
+    dfpart["sentiment_norm"] = (
+        dfpart["sentiment"]
+        .fillna("")
+        .astype(str)
+        .str.upper()
+        .str.replace(" ", "", regex=False)
+    )
+
+    def map_sentiment(s):
+        if "POSITIVO" in s:
+            return 0
+        elif "NEUTRO" in s:
+            return 1
+        elif "NEGATIVO" in s:
+            return 2
+        return 99
+
+    dfpart["sent_order"] = dfpart["sentiment_norm"].apply(map_sentiment)
+
+    # SOLO orden por sentiment
+    return dfpart.sort_values("sent_order", ascending=True)
 
 # === CARD ===
 def render_card(row, tambien_en_html=""):
