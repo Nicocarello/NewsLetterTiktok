@@ -71,7 +71,7 @@ def clean_value(val):
     return str(val).strip()
 
 # === CARD ===
-def render_card(row, tambien_en_html=""):
+def render_card(row, tambien_en_html="", mostrar_sentiment=True):
     title = clean_value(row.get("title"))
     snippet = clean_value(row.get("snippet"))
     source = clean_value(row.get("source") or row.get("domain"))
@@ -79,6 +79,10 @@ def render_card(row, tambien_en_html=""):
     link = clean_value(row.get("link"))
     tag = clean_value(row.get("tag")).upper()
     sentiment = clean_value(row.get("sentiment"))
+
+    sentiment_html = ""
+    if mostrar_sentiment:
+        sentiment_html = f"<p><b>Sentiment:</b> {sentiment_badge(sentiment)}</p>"
 
     return f"""
     <div style='background:#fff;border:1px solid #ddd;border-radius:8px;
@@ -96,8 +100,8 @@ def render_card(row, tambien_en_html=""):
         </p>
 
         <p><b>Media:</b> {source} | <b>{tier}</b></p>
-        <p><b>Sentiment:</b> {sentiment_badge(sentiment)}</p>
 
+        {sentiment_html}
         {tambien_en_html}
     </div>
     """
@@ -207,7 +211,8 @@ def format_email_html(df, window_label, competencia_df=None):
 
                     tambien_en_html += "</div>"
 
-                body.append(render_card(principal, tambien_en_html))
+                #body.append(render_card(principal, tambien_en_html))
+                body.append(render_card(row, mostrar_sentiment=not is_competencia))
 
             for _, row in sin_tema.iterrows():
                 body.append(render_card(row))
