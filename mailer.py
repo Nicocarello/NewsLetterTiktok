@@ -166,7 +166,7 @@ def format_email_html(df, window_label, competencia_df=None):
     
         dfpart["sent_order"] = dfpart["sentiment_norm"].map(sent_order).fillna(99)
 
-    return dfpart.sort_values("sent_order", ascending=True)
+        return dfpart.sort_values("sent_order", ascending=True)
 
     def render_card(row, show_sentiment=True):
         title = ""
