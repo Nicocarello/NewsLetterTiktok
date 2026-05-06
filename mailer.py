@@ -146,9 +146,12 @@ def format_email_html(df, window_label, competencia_df=None):
     def sort_news(dfpart):
         dfpart = dfpart.copy()
     
-        # crear columna si no existe
+        # Si NO hay sentiment, no ordenar por eso
+        if "sentiment" not in dfpart.columns:
+            return dfpart  # o podés hacer otro tipo de orden si querés
+    
         dfpart["sentiment_norm"] = (
-            dfpart.get("sentiment", "")
+            dfpart["sentiment"]
             .astype(str)
             .str.strip()
             .str.upper()
@@ -162,8 +165,8 @@ def format_email_html(df, window_label, competencia_df=None):
         }
     
         dfpart["sent_order"] = dfpart["sentiment_norm"].map(sent_order).fillna(99)
-    
-        return dfpart.sort_values("sent_order", ascending=True)
+
+    return dfpart.sort_values("sent_order", ascending=True)
 
     def render_card(row, show_sentiment=True):
         title = ""
