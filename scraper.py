@@ -21,8 +21,8 @@ import sys
 import math
 import threading
 import tempfile
-import calendar
 from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
@@ -32,7 +32,6 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 GOOGLE_CREDENTIALS_ENV = os.getenv("GOOGLE_CREDENTIALS")
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14")
-SECOND_SPREADSHEET_ID = os.getenv("SECOND_SPREADSHEET_ID", "1JTOriFqcUK3TqbJH1Gn4n5PZXFW1Mqedmpa9jIdYqiA")
 ACTOR_ID = os.getenv("ACTOR_ID", "easyapi/google-news-scraper")
 
 # --- Gemini config ---
@@ -56,7 +55,7 @@ if not APIFY_TOKEN:
 COUNTRIES = [c.strip() for c in os.getenv("COUNTRIES", "ar,cl,pe").split(",") if c.strip()]
 QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
-    "tik tok,tiktok,tiktok grooming,tiktok estafa"
+    "tik-tok,tiktok,tiktok suicidio,tiktok grooming,tiktok amenaza,tiktok estafa"
 ).split(",") if q.strip()]
 
 try:
@@ -74,15 +73,17 @@ TZ_ARGENTINA = pytz.timezone("America/Argentina/Buenos_Aires")
 # Concurrency tunables (env)
 MAX_CONCURRENT_ACTORS = int(os.getenv("MAX_CONCURRENT_ACTORS", "4"))
 MAX_CONCURRENT_DATASET_FETCH = int(os.getenv("MAX_CONCURRENT_DATASET_FETCH", "6"))
+
+# LLM concurrency guard (code-default; can be overridden via env if needed)
 LLM_MAX_CONCURRENT = int(os.getenv("LLM_MAX_CONCURRENT", "2"))
-MAX_FETCH_WORKERS = int(os.getenv("MAX_FETCH_WORKERS", "3"))
 
 # --- Google Sheets client ---
+# Defensive loading of service account info from env (avoid logging full JSON)
 try:
     sa_info = json.loads(GOOGLE_CREDENTIALS_ENV)
     creds = service_account.Credentials.from_service_account_info(sa_info, scopes=SCOPES)
     sheet_service = build('sheets', 'v4', credentials=creds).spreadsheets()
-except Exception:
+except Exception as e:
     logging.exception("Failed loading Google credentials (sanitized). Exiting.")
     sys.exit(1)
 
@@ -95,6 +96,7 @@ tag_cache_lock = threading.Lock()
 llm_semaphore = threading.Semaphore(LLM_MAX_CONCURRENT)
 
 def atomic_write_json(path, data):
+    # Write to temp and replace atomically
     dirpath = os.path.dirname(path) or '.'
     try:
         with tempfile.NamedTemporaryFile('w', dir=dirpath, delete=False, encoding='utf-8') as fh:
@@ -108,6 +110,7 @@ def atomic_write_json(path, data):
     except Exception as e:
         logging.warning("atomic_write_json failed for %s: %s", path, e)
 
+# --- Helpers: backoff retry (reusable) ---
 def retry(fn, max_attempts=5, base_delay=1.5, max_delay=60, jitter=0.4, *args, **kwargs):
     attempt = 0
     while True:
@@ -140,9 +143,11 @@ def normalize_link(url):
     if not url:
         return ''
     url = str(url).strip()
-    url = re.sub(r'(/amp/?|=amp|\.amp)$', '', url)
+    url = re.sub(r'(/amp/?|=amp|\.amp)$', '', url)   # quita /amp o /amp/ o =amp al final
     return url
 
+# Optional helper
+import calendar
 def format_week_range(date_str):
     if not date_str or pd.isna(date_str):
         return ''
@@ -155,7 +160,7 @@ def format_week_range(date_str):
     except Exception:
         return ''
 
-# --- Parallel actor execution (query x country) ---
+# --- Parallel actor execution (build task list: query x country) ---
 tasks = []
 for query in QUERIES:
     for country in COUNTRIES:
@@ -193,13 +198,14 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACTORS) as ex:
             logging.warning("Run failed for %s - %s: %s", res["country"], res["query"], res["error"])
             continue
         if not res["dataset_id"]:
+            # Log only limited part of run to avoid leaking secrets
             logging.warning("No dataset generated for %s - %s", res["country"], res["query"])
             continue
         actor_results.append(res)
 
 logging.info("Actor executions completed: %d successful / %d total", len(actor_results), len(tasks))
 
-# --- Download datasets in parallel ---
+# --- Descarga datasets en paralelo ---
 def fetch_dataset_items(entry):
     dataset_id = entry["dataset_id"]
     country = entry["country"]
@@ -214,7 +220,7 @@ def fetch_dataset_items(entry):
         df["query"] = query
         df["scraped_at"] = datetime.now(TZ_ARGENTINA).isoformat()
         return df
-    except Exception:
+    except Exception as e:
         logging.exception("Error listing items for dataset %s.", dataset_id)
         return None
 
@@ -241,6 +247,7 @@ else:
 
 final_df = safe_convert_date_col(final_df, 'date_utc')
 
+# Ensure additional columns exist (we'll store classification in 'tag')
 for col in ('tag', 'semana', 'article_body', 'sentiment'):
     if col not in final_df.columns:
         final_df[col] = ''
@@ -252,8 +259,9 @@ try:
 except Exception:
     final_df['scraped_at'] = final_df['scraped_at'].astype(str).fillna('')
 
-# --- Article fetch + parse ---
+# --- Article fetch + parse w/ Session + ThreadPool (cache simple) ---
 CACHE_PATH = os.getenv("ARTICLE_CACHE_PATH", "article_cache.json")
+MAX_FETCH_WORKERS = int(os.getenv("MAX_FETCH_WORKERS", "3"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "15"))
 REQUEST_RETRIES = int(os.getenv("REQUEST_RETRIES", "2"))
 REQUEST_SLEEP_BETWEEN = float(os.getenv("REQUEST_SLEEP_BETWEEN", "0.2"))
@@ -279,6 +287,7 @@ article_cache = load_cache(CACHE_PATH)
 def url_key(u):
     return normalize_link(u)
 
+# Configure session with adapter and moderate pool sizes
 session = requests.Session()
 adapter = HTTPAdapter(pool_connections=20, pool_maxsize=50)
 session.mount("http://", adapter)
@@ -296,7 +305,7 @@ def fetch_html_with_retries(url):
                 return resp.text
             logging.debug("fetch_html: %s returned status %d", url, getattr(resp, "status_code", None))
         except requests.RequestException as e:
-            logging.debug("fetch_html attempt %d for %s failed: %s", attempt + 1, url, e)
+            logging.debug("fetch_html attempt %d for %s failed: %s", attempt+1, url, e)
         time.sleep(0.5 + REQUEST_SLEEP_BETWEEN * attempt)
     return None
 
@@ -321,12 +330,12 @@ def fetch_and_parse(url):
     body = extract_body_from_html(url, html) if html else ''
     with article_cache_lock:
         article_cache[k] = body
+    # small polite sleep
     time.sleep(REQUEST_SLEEP_BETWEEN)
     return k, body
 
 links = final_df.get('link', pd.Series([], dtype=str)).dropna().astype(str).unique().tolist()
-logging.info("Starting article fetch: %d unique links (cache hits: %d)",
-             len(links), sum(1 for l in links if url_key(l) in article_cache))
+logging.info("Starting article fetch: %d unique links (cache hits: %d)", len(links), sum(1 for l in links if url_key(l) in article_cache))
 
 link_to_body = {}
 with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
@@ -348,15 +357,20 @@ final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_k
 # ---------------------------
 # Filtro robusto (keep only rows mentioning TikTok)
 # ---------------------------
-mask = final_df.get('article_body', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
+mask = (
+    # final_df.get('title', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
+    # final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
+    final_df.get('article_body', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
+)
 before_tot = len(final_df)
 final_df = final_df[mask].copy()
 after_tot = len(final_df)
 logging.info("After body verification filter: %d -> %d rows (removed %d)", before_tot, after_tot, before_tot - after_tot)
 
 # ---------------------------
-# CATEGORIZACIÓN
+# CATEGORIZACIÓN POST-FILTER
 # ---------------------------
+
 CANONICAL_CATEGORIES = [
     "Consumer & Brand",
     "Music",
@@ -453,7 +467,7 @@ INSTRUCCIONES CRÍTICAS (LEER ATENTAMENTE)
 1) ANALIZA la noticia provista abajo.
 2) RESPONDE EXACTAMENTE con UNA de las siguientes cadenas (sin comillas, sin punto final, sin texto extra, sin explicación): 
    {allowed_line}
-3) RESPONDE SOLO con la cadena EXACTA: por ejemplo: Product
+3) RESPONDE SOLO con la cadena EXACTA: por ejemplo: Product  (sin comillas)
 4) Si por alguna razón NO PUEDES CLASIFICAR (texto ausente o incompleto), RESPONDE EXACTAMENTE: Corporate Reputation
 5) NO agregues ninguna otra palabra, puntuación ni carácter.
 
@@ -462,6 +476,13 @@ NOTICIA:
 """
     return prompt
 
+# --- Limpieza variable obsoleta si estaba presente ---
+try:
+    del VALID_SENTIMENTS
+except NameError:
+    pass
+
+# --- Category cache (tag_cache) ---
 CATEGORY_CACHE_PATH = os.getenv("CATEGORY_CACHE_PATH", "category_cache.json")
 try:
     if os.path.exists(CATEGORY_CACHE_PATH):
@@ -472,20 +493,28 @@ try:
 except Exception:
     tag_cache = {}
 
+# Wrapper para llamar al modelo con retry y parsing defensivo
+def _call_model_with_retry(prompt, max_attempts=3):
+    return retry(lambda: model.generate_content(prompt), max_attempts=max_attempts)
+
 def categorize_text_with_model(texto):
+    """
+    Calls the LLM under a concurrency semaphore and parses defensively.
+    """
     try:
         if model is None:
+            logging.debug("Model not initialized — returning fallback category")
             return "Corporate Reputation"
 
         prompt = build_prompt_from_text(texto)
 
+        # ensure concurrency limit for LLM
         with llm_semaphore:
             def call():
                 try:
                     return model.generate_content(prompt, temperature=0, max_output_tokens=20)
                 except TypeError:
                     return model.generate_content(prompt)
-
             try:
                 resp = retry(call, max_attempts=3)
             except Exception as e:
@@ -507,12 +536,16 @@ def categorize_text_with_model(texto):
                 raw = str(resp)
 
         raw = (raw or "").strip()
+
+        # Quick sanity checks for system-style replies; fallback if suspicious
         lower_raw = raw.lower()
         if raw.startswith("(") or lower_raw.startswith("por favor") or "proporciona la noticia" in lower_raw:
             logging.warning("Model returned a system/clarification message; using fallback category.")
             return "Corporate Reputation"
 
         cat = normalize_category_from_model_output(raw)
+        if cat == "Corporate Reputation" and raw.upper() not in [c.upper() for c in CANONICAL_CATEGORIES]:
+            logging.debug("Model returned unmapped raw output (sanitized).")
         return cat
 
     except Exception as e:
@@ -523,6 +556,7 @@ def categorize_row_obtaining_text(row):
     url = normalize_link((row.get("link") or "").strip())
     k = url_key(url)
 
+    # Cache hit
     with tag_cache_lock:
         if k and k in tag_cache:
             return tag_cache[k]
@@ -557,6 +591,7 @@ def categorize_row_obtaining_text(row):
 
     return category
 
+# Ejecutar clasificación en paralelo
 rows_to_categorize = final_df.reset_index()[["index", "link", "article_body"]].to_dict(orient="records")
 logging.info("Starting category classification for %d rows (workers=%d)...", len(rows_to_categorize), MAX_FETCH_WORKERS)
 
@@ -572,20 +607,23 @@ with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
             category = "Corporate Reputation"
         categories_map[r["index"]] = category
 
+# Asignar resultado en 'tag'
 final_df = final_df.reset_index()
 final_df["tag"] = final_df["index"].map(lambda i: categories_map.get(i, "Corporate Reputation"))
 final_df = final_df.drop(columns=["index"]).reset_index(drop=True)
 
 logging.info("Category classification completed. Distribution: %s", final_df["tag"].value_counts().to_dict())
 
+# Persistir tag cache atomically
 try:
     atomic_write_json(CATEGORY_CACHE_PATH, tag_cache)
 except Exception as e:
     logging.warning("Could not save category cache: %s", e)
 
 # ---------------------------
-# SENTIMENT CLASSIFICATION (opcional)
+# SENTIMENT CLASSIFICATION (POSITIVO / NEGATIVO / NEUTRO) - using Gemini
 # ---------------------------
+
 def analizar_noticia(url):
     try:
         response = session.get(url, timeout=REQUEST_TIMEOUT)
@@ -596,20 +634,22 @@ def analizar_noticia(url):
         texto = " ".join(paragraphs)
 
         prompt = f"""
-ROL
+        ROL
 Actúa como Analista Senior de PR/Reputación. Tu única tarea es determinar si la noticia
 es POSITIVA, NEGATIVA o NEUTRA respecto a la reputación de TikTok como empresa/plataforma.
 
-INSTRUCCIONES
+INSTRUCCIONES (leer atentamente)
 - Analiza SOLO el texto provisto.
 - Responde únicamente con UNA de las tres palabras EXACTAS (en mayúsculas): POSITIVO, NEGATIVO o NEUTRO.
 - No añadas puntuación, explicaciones ni ningún otro texto.
 - Si no puedes clasificar por falta de información, responde EXACTAMENTE: NEUTRO
+- Respuestas aceptadas: ['POSITIVO','NEGATIVO','NEUTRO']
 
 NOTICIA:
-{texto}
-"""
+        {texto}
+        """
 
+        # Use semaphore to control concurrency
         with llm_semaphore:
             resp = model.generate_content(prompt)
         resultado = getattr(resp, "text", "") or ""
@@ -622,93 +662,172 @@ NOTICIA:
         logging.warning("Error processing %s: %s", url, e)
         return "NEUTRO"
 
-# Si quieres activar sentiment, descomenta:
-# final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
+#final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
 
-# ---------------------------
-# FINAL CLEANUP
-# ---------------------------
+# Ensure column order and presence (header keeps 'tag' and 'sentiment' if you want both)
 header = ['semana', 'date_utc', 'country', 'title', 'link', 'domain', 'source', 'snippet', 'tag', 'sentiment', 'scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
 final_df['link'] = final_df['link'].astype(str).apply(normalize_link)
 final_df = final_df.drop_duplicates(subset='link')
 final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
-# ---------------------------
-# APPEND TO BOTH SHEETS BELOW EXISTING ROWS
-# ---------------------------
+# --- Read existing sheet and combine (incremental append instead of full rewrite) ---
 SHEET_RANGE = "2026!A:K"
+HEADER = ['semana', 'date_utc', 'country', 'title', 'link', 'domain', 'source', 'snippet', 'tag', 'sentiment', 'scraped_at']
 
-TARGETS = [SPREADSHEET_ID]
-if SECOND_SPREADSHEET_ID and SECOND_SPREADSHEET_ID != SPREADSHEET_ID:
-    TARGETS.append(SECOND_SPREADSHEET_ID)
-
-def df_to_values(df):
-    df = df.copy()
-
-    for col in header:
-        if col not in df.columns:
-            df[col] = ''
-
-    df = df.reindex(columns=header, fill_value='')
-    df = df.replace([np.nan, pd.NaT, None], '').replace([np.inf, -np.inf], '')
-    df['link'] = df['link'].astype(str).apply(normalize_link)
-    df = df.drop_duplicates(subset='link')
-    df = df.drop_duplicates(subset=['title', 'snippet'])
-
+# 1) Read current sheet values (if any)
+try:
+    result = sheet_service.values().get(spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE).execute()
+    values = result.get("values", [])
+    logging.info("Read %d rows from sheet (including header if present).", len(values))
+except HttpError as e:
+    logging.exception("Failed to read existing sheet (sanitized): %s", e)
     values = []
-    for row in df[header].values.tolist():
-        cleaned = []
-        for cell in row:
-            if isinstance(cell, (np.integer,)):
-                val = int(cell)
-            elif isinstance(cell, (np.floating,)):
-                fv = float(cell)
-                val = '' if math.isnan(fv) or math.isinf(fv) else fv
-            elif isinstance(cell, (np.bool_, bool)):
-                val = bool(cell)
-            elif isinstance(cell, pd.Timestamp):
-                val = '' if pd.isna(cell) else cell.isoformat()
-            else:
-                val = '' if cell is None else str(cell)
+except Exception as e:
+    logging.exception("Failed to read existing sheet (sanitized): %s", e)
+    values = []
 
-            if isinstance(val, str) and val.lower() in ('nan', 'nat', 'none'):
+# 2) Build set of existing links from the sheet to avoid duplicate appends
+existing_links_set = set()
+sheet_has_header = False
+if values and len(values) >= 1:
+    header_row = values[0]
+    link_idx = None
+    try:
+        link_idx = header_row.index('link')
+        sheet_has_header = True
+    except ValueError:
+        row_lower = [c.lower() for c in header_row]
+        if 'link' in row_lower:
+            link_idx = row_lower.index('link')
+            sheet_has_header = True
+        else:
+            if len(header_row) == len(HEADER):
+                try:
+                    link_idx = HEADER.index('link')
+                    sheet_has_header = True
+                except Exception:
+                    link_idx = None
+
+    if link_idx is not None:
+        for r in values[1:]:
+            try:
+                if len(r) > link_idx:
+                    v = normalize_link(r[link_idx].strip())
+                    if v:
+                        existing_links_set.add(v)
+            except Exception:
+                continue
+
+sheet_empty = len(values) == 0
+
+# 3) Ensure final_df has correct columns and sanitized values
+for col in HEADER:
+    if col not in final_df.columns:
+        final_df[col] = ''
+
+final_df = final_df.replace([np.nan, pd.NaT, None], '').replace([np.inf, -np.inf], '')
+
+# Build list of candidate rows (in correct order), and filter out ones with link already in sheet
+rows_to_add = []
+new_links_count = 0
+for row in final_df[HEADER].values.tolist():
+    row_map = dict(zip(HEADER, row))
+    link = normalize_link(str(row_map.get('link', '')).strip())
+    if not link:
+        continue
+    if link in existing_links_set:
+        continue
+    sanitized_cells = []
+    for cell in row:
+        if isinstance(cell, (np.integer,)):
+            val = int(cell)
+        elif isinstance(cell, (np.floating,)):
+            fv = float(cell)
+            if math.isnan(fv) or math.isinf(fv):
                 val = ''
-            cleaned.append(val)
+            else:
+                val = fv
+        elif isinstance(cell, (np.bool_, bool)):
+            val = bool(cell)
+        else:
+            try:
+                import pandas as _pd
+                if isinstance(cell, _pd.Timestamp):
+                    if pd.isna(cell):
+                        val = ''
+                    else:
+                        val = cell.isoformat()
+                else:
+                    val = '' if cell is None else str(cell)
+            except Exception:
+                val = '' if cell is None else str(cell)
+        if isinstance(val, str) and val.lower() in ('nan', 'nat', 'none'):
+            val = ''
+        sanitized_cells.append(val)
+    rows_to_add.append([str(c) for c in sanitized_cells])
+    existing_links_set.add(link)
+    new_links_count += 1
 
-        values.append(cleaned)
+if new_links_count == 0 and not sheet_empty:
+    logging.info("No new rows to add. Exiting without touching the sheet.")
+    logging.info("Script finished successfully.")
+    sys.exit(0)
 
-    return values
-
-def append_rows_to_sheet(spreadsheet_id, rows):
-    if not rows:
-        logging.info("[%s] No rows to append.", spreadsheet_id)
-        return 0
-
-    result = sheet_service.values().append(
-        spreadsheetId=spreadsheet_id,
-        range=SHEET_RANGE,
+# 4) Prepare batches and append with retries/backoff
+BATCH_SIZE = int(os.getenv("SHEET_BATCH_SIZE", "500"))  # adjustable
+def sheets_append_batch(values_batch):
+    body = {"values": values_batch}
+    return sheet_service.values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range="2026!A1",
         valueInputOption="RAW",
         insertDataOption="INSERT_ROWS",
-        body={"values": rows}
+        body=body
     ).execute()
 
-    updated = result.get("updates", {}).get("updatedRows", len(rows))
-    logging.info("[%s] Appended %d rows.", spreadsheet_id, updated)
-    return updated
+def append_with_retry(batch, max_attempts=5, base_delay=1.5):
+    attempt = 0
+    while True:
+        try:
+            return sheets_append_batch(batch)
+        except HttpError as e:
+            attempt += 1
+            if attempt >= max_attempts:
+                logging.exception("Failed to append batch to Sheets after %d attempts (sanitized).", attempt)
+                raise
+            sleep_for = min(60, base_delay * (2 ** (attempt - 1))) + random.random() * 0.5
+            logging.warning("HttpError appending to Sheets (attempt %d/%d) — retrying in %.1fs", attempt, max_attempts, sleep_for)
+            time.sleep(sleep_for)
+        except Exception as e:
+            attempt += 1
+            if attempt >= max_attempts:
+                logging.exception("Failed to append batch to Sheets after %d attempts (sanitized).", attempt)
+                raise
+            sleep_for = min(60, base_delay * (2 ** (attempt - 1))) + random.random() * 0.5
+            logging.warning("Error appending to Sheets (attempt %d/%d) — retrying in %.1fs", attempt, max_attempts, sleep_for)
+            time.sleep(sleep_for)
 
-values_to_append = df_to_values(final_df)
-
-total_by_sheet = {}
-for sheet_id in TARGETS:
+# if sheet empty, write header first (one-time)
+if sheet_empty:
+    logging.info("Sheet empty: writing header first.")
     try:
-        total_by_sheet[sheet_id] = append_rows_to_sheet(sheet_id, values_to_append)
-    except HttpError as e:
-        logging.exception("[%s] Failed appending to sheet: %s", sheet_id, e)
-        total_by_sheet[sheet_id] = 0
+        append_with_retry([HEADER])
     except Exception as e:
-        logging.exception("[%s] Failed appending to sheet: %s", sheet_id, e)
-        total_by_sheet[sheet_id] = 0
+        logging.exception("Could not write header to sheet (sanitized).")
+        raise
 
-logging.info("✅ Append completed: %s", total_by_sheet)
+# Append in batches
+total_added = 0
+for i in range(0, len(rows_to_add), BATCH_SIZE):
+    batch = rows_to_add[i:i + BATCH_SIZE]
+    try:
+        append_with_retry(batch)
+        total_added += len(batch)
+        logging.info("Appended batch %d..%d (rows=%d) to sheet.", i, i + len(batch) - 1, len(batch))
+    except Exception as e:
+        logging.exception("Failed appending batch starting at %d (sanitized).", i)
+        continue
+
+logging.info("✅ Sheet updated. New rows appended: %d", total_added)
 logging.info("Script finished successfully.")
