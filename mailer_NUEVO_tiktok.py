@@ -160,36 +160,36 @@ def format_email_html(df, window_label, competencia_df=None):
 
     def render_block(dataframe, is_competencia=False):
 
-    if dataframe.empty:
-        return
-
-    for country, df_country in dataframe.groupby("country"):
-
-        flag = COUNTRY_FLAGS.get(str(country).strip(), "")
-
-        if is_competencia:
-            label = f"Competencia — {country} {flag}"
-        else:
-            label = f"TikTok — {country} {flag}"
-
-        body.append(
-            f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
-            f"<span style='color:#fff;font-size:22px;font-weight:800;'>{label}</span>"
-            f"</div>"
-        )
-
-        df_country = df_country.copy()
-        df_country = sort_news(df_country)   # <- ACÁ
-
-        if "tema" not in df_country.columns:
-            df_country["tema"] = ""
-
-        df_country["tema"] = df_country["tema"].fillna("").astype(str).str.strip()
-
-        con_tema = df_country[df_country["tema"] != ""]
-        sin_tema = df_country[df_country["tema"] == ""]
-
-        for tema, grupo in con_tema.groupby("tema"):
+        if dataframe.empty:
+            return
+    
+        for country, df_country in dataframe.groupby("country"):
+    
+            flag = COUNTRY_FLAGS.get(str(country).strip(), "")
+    
+            if is_competencia:
+                label = f"Competencia — {country} {flag}"
+            else:
+                label = f"TikTok — {country} {flag}"
+    
+            body.append(
+                f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
+                f"<span style='color:#fff;font-size:22px;font-weight:800;'>{label}</span>"
+                f"</div>"
+            )
+    
+            df_country = df_country.copy()
+            df_country = sort_news(df_country)   # <- ACÁ
+    
+            if "tema" not in df_country.columns:
+                df_country["tema"] = ""
+    
+            df_country["tema"] = df_country["tema"].fillna("").astype(str).str.strip()
+    
+            con_tema = df_country[df_country["tema"] != ""]
+            sin_tema = df_country[df_country["tema"] == ""]
+    
+            for tema, grupo in con_tema.groupby("tema"):
 
                 grupo = grupo.copy()
 
