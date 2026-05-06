@@ -70,33 +70,33 @@ def clean_value(val):
         return ""
     return str(val).strip()
 
-def sort_news(dfpart):
-    dfpart = dfpart.copy()
+# def sort_news(dfpart):
+#     dfpart = dfpart.copy()
 
-    if "sentiment" not in dfpart.columns:
-        dfpart["sentiment"] = ""
+#     if "sentiment" not in dfpart.columns:
+#         dfpart["sentiment"] = ""
 
-    dfpart["sentiment_norm"] = (
-        dfpart["sentiment"]
-        .fillna("")
-        .astype(str)
-        .str.upper()
-        .str.replace(" ", "", regex=False)
-    )
+#     dfpart["sentiment_norm"] = (
+#         dfpart["sentiment"]
+#         .fillna("")
+#         .astype(str)
+#         .str.upper()
+#         .str.replace(" ", "", regex=False)
+#     )
 
-    def map_sentiment(s):
-        if "POSITIVO" in s:
-            return 0
-        elif "NEUTRO" in s:
-            return 1
-        elif "NEGATIVO" in s:
-            return 2
-        return 99
+#     def map_sentiment(s):
+#         if "POSITIVO" in s:
+#             return 0
+#         elif "NEUTRO" in s:
+#             return 1
+#         elif "NEGATIVO" in s:
+#             return 2
+#         return 99
 
-    dfpart["sent_order"] = dfpart["sentiment_norm"].apply(map_sentiment)
+#     dfpart["sent_order"] = dfpart["sentiment_norm"].apply(map_sentiment)
 
-    # SOLO orden por sentiment
-    return dfpart.sort_values("sent_order", ascending=True)
+#     # SOLO orden por sentiment
+#     return dfpart.sort_values("sent_order", ascending=True)
 
 # === CARD ===
 def render_card(row, tambien_en_html=""):
@@ -185,7 +185,7 @@ def format_email_html(df, window_label, competencia_df=None):
             )
     
             df_country = df_country.copy()
-            df_country = sort_news(df_country)   # <- ACÁ
+            # df_country = sort_news(df_country)   # <- ACÁ
     
             if "tema" not in df_country.columns:
                 df_country["tema"] = ""
