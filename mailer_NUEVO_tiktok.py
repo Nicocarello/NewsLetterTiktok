@@ -212,10 +212,14 @@ def format_email_html(df, window_label, competencia_df=None):
                     tambien_en_html += "</div>"
 
                 #body.append(render_card(principal, tambien_en_html))
-                body.append(render_card(row, mostrar_sentiment=not is_competencia))
+                #body.append(render_card(row, mostrar_sentiment=not is_competencia))
+                body.append(render_card(principal, tambien_en_html, mostrar_sentiment=not is_competencia))
 
+            #for _, row in sin_tema.iterrows():
+            #    body.append(render_card(row))
+            
             for _, row in sin_tema.iterrows():
-                body.append(render_card(row))
+                body.append(render_card(row, mostrar_sentiment=not is_competencia))
 
     # bloques
     render_block(df, is_competencia=False)
