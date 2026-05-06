@@ -102,14 +102,8 @@ with ThreadPoolExecutor(max_workers=6) as ex:
 final_df = pd.concat(dfs, ignore_index=True)
 
 # --- CLEAN ---
-if 'link' in final_df.columns:
-    final_df.drop_duplicates(subset="link", inplace=True)
-
-final_df['country'] = final_df['country'].replace({
-    'ar': 'Argentina',
-    'cl': 'Chile',
-    'pe': 'Peru'
-})
+final_df.drop_duplicates(subset="link", inplace=True)
+final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
 
 # --- FILTER ---
 pattern = re.compile(r"(youtube|google|instagram|facebook|roblox)", re.IGNORECASE)
@@ -118,24 +112,25 @@ title_col = final_df['title'].astype(str) if 'title' in final_df.columns else pd
 snippet_col = final_df['snippet'].astype(str) if 'snippet' in final_df.columns else pd.Series([''] * len(final_df))
 
 mask = title_col.str.contains(pattern, na=False) | snippet_col.str.contains(pattern, na=False)
-final_df = final_df[mask]
+final_df = final_df[mask].copy()
 
 # --- FORMAT FIXES ---
-if 'date_utc' in final_df.columns:
-    try:
-        final_df['date_utc'] = pd.to_datetime(
-            final_df['date_utc'],
-            utc=True,
-            errors='coerce'
-        ).dt.tz_convert(TZ_ARGENTINA).dt.strftime('%d/%m/%Y')
-    except Exception:
-        final_df['date_utc'] = final_df['date_utc'].astype(str)
+def format_date_utc(value):
+    dt = pd.to_datetime(value, utc=True, errors='coerce')
+    if pd.isna(dt):
+        return ''
+    return dt.tz_convert(TZ_ARGENTINA).strftime('%d/%m/%Y')
 
-# 🔥 CLAVE: siempre setear scraped_at al final
+if 'date_utc' in final_df.columns:
+    final_df['date_utc'] = final_df['date_utc'].apply(format_date_utc)
+else:
+    final_df['date_utc'] = ''
+
+# forzar siempre scraped_at al final
 final_df['scraped_at'] = datetime.now(TZ_ARGENTINA).strftime('%d/%m/%Y %H:%M')
 
 # --- SHEET ---
-HEADER = ['date_utc','country','title','link','domain','source','snippet','scraped_at','tier','enviar']
+HEADER = ['date_utc', 'country', 'title', 'link', 'domain', 'source', 'snippet', 'scraped_at', 'tier', 'enviar']
 final_df = final_df.reindex(columns=HEADER, fill_value='')
 
 # --- READ EXISTING ---
@@ -156,7 +151,7 @@ for _, row in final_df.iterrows():
     link = normalize_link(row['link'])
     if not link or link in existing_links:
         continue
-    rows.append([str(row[c]) for c in HEADER])
+    rows.append(['' if pd.isna(row[c]) else str(row[c]) for c in HEADER])
     existing_links.add(link)
 
 if not rows:
