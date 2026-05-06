@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(mes
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 GOOGLE_CREDENTIALS_ENV = os.getenv("GOOGLE_CREDENTIALS")
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
-SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1du5Cx3pK1LnxoVeBXTzP-nY-OSvflKXjJZw2Lq-AE14")
 ACTOR_ID = os.getenv("ACTOR_ID", "easyapi/google-news-scraper")
 
 if not GOOGLE_CREDENTIALS_ENV or not APIFY_TOKEN:
