@@ -231,8 +231,10 @@ def format_email_html(df, window_label, competencia_df=None):
 
 # === EMAIL ===
 def send_email(subject, body):
+    recipients = [r.strip() for r in RECIPIENTS if r.strip()]
+    recipients += ["victoria.arrudi@publicalatam.com", "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com"]
     #recipients = ["victoria.arrudi@publicalatam.com", "luz@publicalatam.com", "sofia.szekasy@publicalatam.com", "ezequiel@publicalatam.com", "matias@publicalatam.com", "sol.lopatin@publicalatam.com"]
-    recipients = ["victoria.arrudi@publicalatam.com", "sofia.szekasy@publicalatam.com"]
+    #recipients = ["victoria.arrudi@publicalatam.com"]
 
     
     msg = MIMEText(body, "html", "utf-8")
