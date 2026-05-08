@@ -130,7 +130,7 @@ else:
 final_df['scraped_at'] = datetime.now(TZ_ARGENTINA).strftime('%d/%m/%Y %H:%M')
 
 # --- SHEET ---
-HEADER = ['date_utc', 'country', 'title', 'link', 'domain', 'source', 'snippet', 'scraped_at', 'tier', 'enviar']
+HEADER = ['date_utc', 'country', 'title', 'link', 'domain', 'source', 'snippet', 'tag', 'scraped_at', 'tier', 'enviar']
 final_df = final_df.reindex(columns=HEADER, fill_value='')
 
 # --- READ EXISTING ---
