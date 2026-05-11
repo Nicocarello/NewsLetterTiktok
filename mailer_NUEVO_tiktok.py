@@ -142,97 +142,70 @@ def format_email_html(df, window_label, competencia_df=None):
     )
 
     def render_block(dataframe, is_competencia=False):
-
         if dataframe.empty:
             return
-
+    
+        sentiment_order_map = {
+            "POSITIVO (PROACTIVO)": 0,
+            "POSITIVO": 1,
+            "NEGATIVO": 2,
+            "NEUTRO": 3,
+        }
+    
+        def normalize_sentiment(val):
+            s = clean_value(val).upper().strip()
+            if "POSITIVO" in s and "PROACTIVO" in s:
+                return "POSITIVO (PROACTIVO)"
+            if "POSITIVO" in s:
+                return "POSITIVO"
+            if "NEGATIVO" in s:
+                return "NEGATIVO"
+            return "NEUTRO"
+    
+        def get_tier_order(val):
+            s = clean_value(val).upper()
+            if "TIER 1" in s:
+                return 1
+            if "TIER 2" in s:
+                return 2
+            if "TIER 3" in s:
+                return 3
+            return 99
+    
         for country, df_country in dataframe.groupby("country"):
-
             flag = COUNTRY_FLAGS.get(str(country).strip(), "")
-
+    
             if is_competencia:
                 label = f"Competencia — {country} {flag}"
             else:
                 label = f"TikTok — {country} {flag}"
-
+    
             body.append(
                 f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
                 f"<span style='color:#fff;font-size:22px;font-weight:800;'>{label}</span>"
                 f"</div>"
             )
-
+    
             df_country = df_country.copy()
-
-            def normalize_sentiment(val):
-                s = clean_value(val).upper().strip()
-                if "POSITIVO" in s and "PROACTIVO" in s:
-                    return "POSITIVO (PROACTIVO)"
-                if "POSITIVO" in s:
-                    return "POSITIVO"
-                if "NEGATIVO" in s:
-                    return "NEGATIVO"
-                return "NEUTRO"
-            
-            SENTIMENT_ORDER = {
-                "POSITIVO (PROACTIVO)": 0,
-                "POSITIVO": 1,
-                "NEGATIVO": 2,
-                "NEUTRO": 3,
-            }
-            
+    
             if "sentiment" not in df_country.columns:
                 df_country["sentiment"] = "NEUTRO"
-            
+            if "tier" not in df_country.columns:
+                df_country["tier"] = ""
+    
             df_country["sentiment_norm"] = df_country["sentiment"].apply(normalize_sentiment)
-            df_country["sentiment_order"] = df_country["sentiment_norm"].map(SENTIMENT_ORDER).fillna(99)
-            
-            if "tema" not in df_country.columns:
-                df_country["tema"] = ""
-            
-            df_country["tema"] = df_country["tema"].fillna("").astype(str).str.strip()
-            
-            def get_tier_order(val):
-                s = clean_value(val).upper()
-            
-                if "TIER 1" in s:
-                    return 1
-                elif "TIER 2" in s:
-                    return 2
-                elif "TIER 3" in s:
-                    return 3
-                return 99
-
-                def get_tier_order(val):
-                    s = clean_value(val).upper()
-                    m = re.search(r"([123])", s)
-                    if m:
-                        return int(m.group(1))
-                    return 99
-
-                # ORDEN POR SENTIMENT
-                for sentiment_label in ["POSITIVO (PROACTIVO)", "POSITIVO", "NEGATIVO", "NEUTRO"]:
+            df_country["sentiment_order"] = df_country["sentiment_norm"].map(sentiment_order_map).fillna(99)
+            df_country["tier_order"] = df_country["tier"].apply(get_tier_order)
     
-                    df_sent = df_country[df_country["sentiment_norm"] == sentiment_label].copy()
-                    if df_sent.empty:
-                        continue
+            df_country = df_country.sort_values(
+                by=["sentiment_order", "tier_order"],
+                ascending=[True, True],
+                kind="mergesort"
+            )
     
-                    df_sent["tier_order"] = df_sent["tier"].apply(get_tier_order)
-    
-                    # primero Tier 1, luego Tier 2, luego Tier 3
-                    for tier_num in [1, 2, 3, 99]:
-                        tier_df = df_sent[df_sent["tier_order"] == tier_num].copy()
-                        if tier_df.empty:
-                            continue
-    
-                        con_tema = tier_df[tier_df["tema"] != ""].copy()
-                        sin_tema = tier_df[tier_df["tema"] == ""].copy()
-    
-                        for _, row in con_tema.iterrows():
-                            body.append(render_card(row, mostrar_sentiment=not is_competencia))
-    
-                        for _, row in sin_tema.iterrows():
-                            body.append(render_card(row, mostrar_sentiment=not is_competencia))
-                        
+            for _, row in df_country.iterrows():
+                body.append(render_card(row, mostrar_sentiment=not is_competencia))
+                            
     # bloques
     render_block(df, is_competencia=False)
     if competencia_df is not None:
