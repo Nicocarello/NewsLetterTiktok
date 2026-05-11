@@ -665,7 +665,7 @@ NOTICIA:
 #final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
 
 # Ensure column order and presence (header keeps 'tag' and 'sentiment' if you want both)
-header = ['semana', 'date_utc', 'country', 'title', 'link', 'domain','source', 'tier', 'snippet', 'tag', 'sentiment','proactiva','scraped_at', 'enviar', 'tema', 'prioridad', 'alerta_enviada']
+header = ['semana', 'date_utc', 'country', 'title', 'link', 'domain','source', 'tier', 'snippet', 'tag', 'sentiment','proactiva','scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
 final_df['link'] = final_df['link'].astype(str).apply(normalize_link)
 final_df = final_df.drop_duplicates(subset='link')
@@ -673,7 +673,7 @@ final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
 # --- Read existing sheet and combine (incremental append instead of full rewrite) ---
 SHEET_RANGE = "2026!A:L"
-HEADER = ['semana', 'date_utc', 'country', 'title', 'link', 'domain','source', 'tier', 'snippet', 'tag', 'sentiment','proactiva','scraped_at', 'enviar', 'tema', 'prioridad', 'alerta_enviada']
+HEADER = ['semana', 'date_utc', 'country', 'title', 'link', 'domain','source', 'tier', 'snippet', 'tag', 'sentiment','proactiva','scraped_at']
 
 # 1) Read current sheet values (if any)
 try:
