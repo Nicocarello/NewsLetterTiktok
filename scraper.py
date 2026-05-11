@@ -672,7 +672,7 @@ final_df = final_df.drop_duplicates(subset='link')
 final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
 # --- Read existing sheet and combine (incremental append instead of full rewrite) ---
-SHEET_RANGE = "2026!A:K"
+SHEET_RANGE = "2026!A:P"
 HEADER = ['semana', 'date_utc', 'country', 'title', 'link', 'domain','source', 'tier', 'snippet', 'tag', 'sentiment','proactiva','scraped_at', 'enviar', 'tema', 'prioridad', 'alerta_enviada']
 
 # 1) Read current sheet values (if any)
