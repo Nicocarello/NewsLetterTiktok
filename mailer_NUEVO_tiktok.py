@@ -234,8 +234,8 @@ def send_email(subject, body):
     #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
     #recipients += ["victoria.arrudi@publicalatam.com", "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com"]
     #recipients = ["victoria.arrudi@publicalatam.com", "luz@publicalatam.com", "sofia.szekasy@publicalatam.com", "ezequiel@publicalatam.com", "matias@publicalatam.com", "sol.lopatin@publicalatam.com",
-                 "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com","german.nissen@bytedance.com", "german.nissen@tiktok.com", "hernan@quipuadvisors.com", "nadu.gonzalez@gmail.com",
-                 "nicolas.sforzini@tiktok.com", "nicolas@quipuadvisors.com", "pri.pagliuso@bytedance.com", "tabakmansebastian@gmail.com", "seba.gombi@gmail.com", "germannissen@hotmail.com"]
+    #             "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com","german.nissen@bytedance.com", "german.nissen@tiktok.com", "hernan@quipuadvisors.com", "nadu.gonzalez@gmail.com",
+    #             "nicolas.sforzini@tiktok.com", "nicolas@quipuadvisors.com", "pri.pagliuso@bytedance.com", "tabakmansebastian@gmail.com", "seba.gombi@gmail.com", "germannissen@hotmail.com"]
     recipients = ["victoria.arrudi@publicalatam.com"]
 
     
