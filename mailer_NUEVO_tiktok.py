@@ -251,12 +251,13 @@ def format_email_html(df, window_label, competencia_df=None):
                         tambien_en_html = "<div style='margin-top:10px;font-size:13px;color:#000;'>"
                         tambien_en_html += "<strong>También en:</strong><br>"
             
-                        for tier, items in sorted(tiers.items()):
-                            tambien_en_html += f"<strong>{tier}:</strong> "
-                            tambien_en_html += " | ".join(
-                                f"<a href='{l}' target='_blank'>{s}</a>" if l else s
-                                for s, l in items[:3]
-                            )
+                        def tier_sort_key(t):
+                            m = re.search(r'\b([123])\b', t)
+                            if m:
+                                return int(m.group(1))
+                            return 99
+                        
+                        for tier, items in sorted(tiers.items(), key=lambda x: tier_sort_key(x[0])):
                             tambien_en_html += "<br>"
             
                         tambien_en_html += "</div>"
