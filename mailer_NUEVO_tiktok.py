@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import pandas as pd
 import unicodedata
@@ -190,59 +191,90 @@ def format_email_html(df, window_label, competencia_df=None):
             
             df_country["tema"] = df_country["tema"].fillna("").astype(str).str.strip()
             
-            # 👇 ORDEN POR SENTIMENT
-            for sentiment_label in ["POSITIVO (PROACTIVO)", "POSITIVO", "NEGATIVO", "NEUTRO"]:
+                       def get_tier_order(val):
+                            s = clean_value(val).upper()
+                            m = re.search(r"TIER\s*([123])", s)
+                            if m:
+                                return int(m.group(1))
+                            m = re.search(r"\b([123])\b", s)
+                            if m:
+                                return int(m.group(1))
+                            return 99
             
-                df_sent = df_country[df_country["sentiment_norm"] == sentiment_label]
+                        # 👇 ORDEN POR SENTIMENT
+                        for sentiment_label in ["POSITIVO (PROACTIVO)", "POSITIVO", "NEGATIVO", "NEUTRO"]:
             
-                con_tema = df_sent[df_sent["tema"] != ""]
-                sin_tema = df_sent[df_sent["tema"] == ""]
+                            df_sent = df_country[df_country["sentiment_norm"] == sentiment_label].copy()
+                            if df_sent.empty:
+                                continue
             
-                for tema, grupo in con_tema.groupby("tema"):
+                            df_sent["tier_order"] = df_sent["tier"].apply(get_tier_order)
             
-                    grupo = grupo.copy()
+                            con_tema = df_sent[df_sent["tema"] != ""].copy()
+                            sin_tema = df_sent[df_sent["tema"] == ""].copy()
             
-                    if "prioridad" not in grupo.columns:
-                        grupo["prioridad"] = ""
+                            # ordena primero por tema y dentro por tier
+                            if not con_tema.empty:
+                                con_tema = con_tema.sort_values(by=["tema", "tier_order"], ascending=[True, True])
             
-                    grupo["prioridad_flag"] = grupo["prioridad"].fillna("").astype(str).str.strip() != ""
-                    grupo = grupo.sort_values(by="prioridad_flag", ascending=False)
+                                for tema, grupo in con_tema.groupby("tema", sort=False):
+                                    grupo = grupo.copy()
+                                    grupo = grupo.sort_values(by=["tier_order"], ascending=True)
             
-                    principal = grupo.iloc[0]
-                    secundarias = grupo.iloc[1:]
+                                    if "prioridad" not in grupo.columns:
+                                        grupo["prioridad"] = ""
             
-                    tambien_en_html = ""
+                                    grupo["prioridad_flag"] = grupo["prioridad"].fillna("").astype(str).str.strip() != ""
+                                    grupo = grupo.sort_values(by=["tier_order", "prioridad_flag"], ascending=[True, False])
             
-                    if not secundarias.empty:
-                        sec = secundarias.copy()
-                        sec["tier"] = sec["tier"].fillna("").astype(str)
+                                    principal = grupo.iloc[0]
+                                    secundarias = grupo.iloc[1:]
             
-                        tiers = {}
+                                    tambien_en_html = ""
             
-                        for _, row_sec in sec.iterrows():
-                            tier = clean_value(row_sec.get("tier"))
-                            source = clean_value(row_sec.get("source"))
-                            link = clean_value(row_sec.get("link"))
-                            tiers.setdefault(tier, []).append((source, link))
+                                    if not secundarias.empty:
+                                        sec = secundarias.copy()
+                                        sec["tier"] = sec["tier"].fillna("").astype(str)
+                                        sec["tier_order"] = sec["tier"].apply(get_tier_order)
             
-                        tambien_en_html = "<div style='margin-top:10px;font-size:13px;color:#000;'>"
-                        tambien_en_html += "<strong>También en:</strong><br>"
+                                        tiers = {}
             
-                        for tier, items in sorted(tiers.items()):
-                            tambien_en_html += f"<strong>{tier}:</strong> "
-                            tambien_en_html += " | ".join(
-                                f"<a href='{l}' target='_blank'>{s}</a>" if l else s
-                                for s, l in items[:3]
-                            )
-                            tambien_en_html += "<br>"
+                                        for _, row_sec in sec.iterrows():
+                                            tier = clean_value(row_sec.get("tier"))
+                                            source = clean_value(row_sec.get("source"))
+                                            link = clean_value(row_sec.get("link"))
+                                            tiers.setdefault(tier, []).append((source, link))
             
-                        tambien_en_html += "</div>"
+                                        def tier_sort_key(t):
+                                            m = re.search(r"TIER\s*([123])", str(t).upper())
+                                            if m:
+                                                return int(m.group(1))
+                                            m = re.search(r"\b([123])\b", str(t))
+                                            if m:
+                                                return int(m.group(1))
+                                            return 99
             
-                    body.append(render_card(principal, tambien_en_html, mostrar_sentiment=not is_competencia))
+                                        tambien_en_html = "<div style='margin-top:10px;font-size:13px;color:#000;'>"
+                                        tambien_en_html += "<strong>También en:</strong><br>"
             
-                for _, row in sin_tema.iterrows():
-                    body.append(render_card(row, mostrar_sentiment=not is_competencia))
+                                        for tier, items in sorted(tiers.items(), key=lambda x: tier_sort_key(x[0])):
+                                            tambien_en_html += f"<strong>{tier}:</strong> "
+                                            tambien_en_html += " | ".join(
+                                                f"<a href='{l}' target='_blank'>{s}</a>" if l else s
+                                                for s, l in items[:3]
+                                            )
+                                            tambien_en_html += "<br>"
             
+                                        tambien_en_html += "</div>"
+            
+                                    body.append(render_card(principal, tambien_en_html, mostrar_sentiment=not is_competencia))
+            
+                            if not sin_tema.empty:
+                                sin_tema = sin_tema.sort_values(by=["tier_order"], ascending=True)
+            
+                                for _, row in sin_tema.iterrows():
+                                    body.append(render_card(row, mostrar_sentiment=not is_competencia))
+                        
     # bloques
     render_block(df, is_competencia=False)
     if competencia_df is not None:
