@@ -190,10 +190,24 @@ def format_email_html(df, window_label, competencia_df=None):
             
             df_country["tema"] = df_country["tema"].fillna("").astype(str).str.strip()
             
-            # 👇 ORDEN POR SENTIMENT
+            #  ORDEN POR SENTIMENT
             for sentiment_label in ["POSITIVO (PROACTIVO)", "POSITIVO", "NEGATIVO", "NEUTRO"]:
             
-                df_sent = df_country[df_country["sentiment_norm"] == sentiment_label]
+                df_sent = df_country[df_country["sentiment_norm"] == sentiment_label].copy()
+
+                # ORDEN POR TIER
+                def get_tier_order(val):
+                    v = clean_value(val).lower()
+                    if "1" in v:
+                        return 0
+                    if "2" in v:
+                        return 1
+                    if "3" in v:
+                        return 2
+                    return 99
+                
+                df_sent["tier_order"] = df_sent["tier"].apply(get_tier_order)
+                df_sent = df_sent.sort_values(by=["tier_order"])
             
                 con_tema = df_sent[df_sent["tema"] != ""]
                 sin_tema = df_sent[df_sent["tema"] == ""]
