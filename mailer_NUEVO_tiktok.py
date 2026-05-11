@@ -193,12 +193,14 @@ def format_email_html(df, window_label, competencia_df=None):
             
             def get_tier_order(val):
                 s = clean_value(val).upper()
-                m = re.search(r"TIER\s*([123])", s)
-                if m:
-                    return int(m.group(1))
-                m = re.search(r"\b([123])\b", s)
-                if m:
-                    return int(m.group(1))
+            
+                if "TIER 1" in s:
+                    return 1
+                elif "TIER 2" in s:
+                    return 2
+                elif "TIER 3" in s:
+                    return 3
+            
                 return 99
 
             # ORDEN POR SENTIMENT
@@ -209,7 +211,8 @@ def format_email_html(df, window_label, competencia_df=None):
                     continue
 
                 df_sent["tier_order"] = df_sent["tier"].apply(get_tier_order)
-
+                df_sent = df_sent.sort_values(by=["tier_order"], ascending=True, kind="mergesort")
+        
                 con_tema = df_sent[df_sent["tema"] != ""].copy()
                 sin_tema = df_sent[df_sent["tema"] == ""].copy()
 
