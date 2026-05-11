@@ -1,5 +1,4 @@
 import os
-import re
 import json
 import pandas as pd
 import unicodedata
@@ -142,70 +141,86 @@ def format_email_html(df, window_label, competencia_df=None):
     )
 
     def render_block(dataframe, is_competencia=False):
+
         if dataframe.empty:
             return
-    
-        sentiment_order_map = {
-            "POSITIVO (PROACTIVO)": 0,
-            "POSITIVO": 1,
-            "NEGATIVO": 2,
-            "NEUTRO": 3,
-        }
-    
-        def normalize_sentiment(val):
-            s = clean_value(val).upper().strip()
-            if "POSITIVO" in s and "PROACTIVO" in s:
-                return "POSITIVO (PROACTIVO)"
-            if "POSITIVO" in s:
-                return "POSITIVO"
-            if "NEGATIVO" in s:
-                return "NEGATIVO"
-            return "NEUTRO"
-    
-        def get_tier_order(val):
-            s = clean_value(val).upper()
-            if "TIER 1" in s:
-                return 1
-            if "TIER 2" in s:
-                return 2
-            if "TIER 3" in s:
-                return 3
-            return 99
-    
+
         for country, df_country in dataframe.groupby("country"):
+
             flag = COUNTRY_FLAGS.get(str(country).strip(), "")
-    
+
             if is_competencia:
                 label = f"Competencia — {country} {flag}"
             else:
                 label = f"TikTok — {country} {flag}"
-    
+
             body.append(
                 f"<div style='max-width:{CONTAINER_WIDTH2};margin:20px auto 10px auto;background:#000;padding:10px 0;text-align:center;'>"
                 f"<span style='color:#fff;font-size:22px;font-weight:800;'>{label}</span>"
                 f"</div>"
             )
-    
+
             df_country = df_country.copy()
-    
-            if "sentiment" not in df_country.columns:
-                df_country["sentiment"] = "NEUTRO"
-            if "tier" not in df_country.columns:
-                df_country["tier"] = ""
-    
-            df_country["sentiment_norm"] = df_country["sentiment"].apply(normalize_sentiment)
-            df_country["sentiment_order"] = df_country["sentiment_norm"].map(sentiment_order_map).fillna(99)
-            df_country["tier_order"] = df_country["tier"].apply(get_tier_order)
-    
-            df_country = df_country.sort_values(
-                by=["sentiment_order", "tier_order"],
-                ascending=[True, True],
-                kind="mergesort"
-            )
-    
-            for _, row in df_country.iterrows():
+
+            if "tema" not in df_country.columns:
+                df_country["tema"] = ""
+
+            df_country["tema"] = df_country["tema"].fillna("").astype(str).str.strip()
+
+            con_tema = df_country[df_country["tema"] != ""]
+            sin_tema = df_country[df_country["tema"] == ""]
+
+            for tema, grupo in con_tema.groupby("tema"):
+
+                grupo = grupo.copy()
+
+                if "prioridad" not in grupo.columns:
+                    grupo["prioridad"] = ""
+
+                grupo["prioridad_flag"] = grupo["prioridad"].fillna("").astype(str).str.strip() != ""
+                grupo = grupo.sort_values(by="prioridad_flag", ascending=False)
+
+                principal = grupo.iloc[0]
+                secundarias = grupo.iloc[1:]
+
+                tambien_en_html = ""
+
+                if not secundarias.empty:
+                    sec = secundarias.copy()
+                    sec["tier"] = sec["tier"].fillna("").astype(str)
+
+                    tiers = {}
+
+                    for _, row_sec in sec.iterrows():
+                        tier = clean_value(row_sec.get("tier"))
+                        source = clean_value(row_sec.get("source"))
+                        link = clean_value(row_sec.get("link"))
+
+                        tiers.setdefault(tier, []).append((source, link))
+
+                    tambien_en_html = "<div style='margin-top:10px;font-size:13px;color:#000;'>"
+                    tambien_en_html += "<strong>También en:</strong><br>"
+
+                    for tier, items in sorted(tiers.items()):
+                        tambien_en_html += f"<strong>{tier}:</strong> "
+                        tambien_en_html += " | ".join(
+                            f"<a href='{l}' target='_blank'>{s}</a>" if l else s
+                            for s, l in items[:3]
+                        )
+                        tambien_en_html += "<br>"
+
+                    tambien_en_html += "</div>"
+
+                #body.append(render_card(principal, tambien_en_html))
+                #body.append(render_card(row, mostrar_sentiment=not is_competencia))
+                body.append(render_card(principal, tambien_en_html, mostrar_sentiment=not is_competencia))
+
+            #for _, row in sin_tema.iterrows():
+            #    body.append(render_card(row))
+            
+            for _, row in sin_tema.iterrows():
                 body.append(render_card(row, mostrar_sentiment=not is_competencia))
-                            
+
     # bloques
     render_block(df, is_competencia=False)
     if competencia_df is not None:
@@ -218,10 +233,10 @@ def format_email_html(df, window_label, competencia_df=None):
 def send_email(subject, body):
     #recipients = [r.strip() for r in RECIPIENTS if r.strip()]
     #recipients += ["victoria.arrudi@publicalatam.com", "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com"]
-    #recipients = ["victoria.arrudi@publicalatam.com", "luz@publicalatam.com", "sofia.szekasy@publicalatam.com", "ezequiel@publicalatam.com", "matias@publicalatam.com", "sol.lopatin@publicalatam.com",
-    #             "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com","german.nissen@bytedance.com", "german.nissen@tiktok.com", "hernan@quipuadvisors.com", "nadu.gonzalez@gmail.com",
-    #             "nicolas.sforzini@tiktok.com", "nicolas@quipuadvisors.com", "pri.pagliuso@bytedance.com", "tabakmansebastian@gmail.com", "seba.gombi@gmail.com", "germannissen@hotmail.com"]
-    recipients = ["victoria.arrudi@publicalatam.com"]
+    recipients = ["victoria.arrudi@publicalatam.com", "luz@publicalatam.com", "sofia.szekasy@publicalatam.com", "ezequiel@publicalatam.com", "matias@publicalatam.com", "sol.lopatin@publicalatam.com",
+                 "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com","german.nissen@bytedance.com", "german.nissen@tiktok.com", "hernan@quipuadvisors.com", "nadu.gonzalez@gmail.com",
+                 "nicolas.sforzini@tiktok.com", "nicolas@quipuadvisors.com", "pri.pagliuso@bytedance.com", "tabakmansebastian@gmail.com", "seba.gombi@gmail.com", "germannissen@hotmail.com"]
+    #recipients = ["victoria.arrudi@publicalatam.com"]
 
     
     msg = MIMEText(body, "html", "utf-8")
