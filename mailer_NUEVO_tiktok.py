@@ -175,7 +175,12 @@ def format_email_html(df, window_label, competencia_df=None):
                 "NEUTRO": 3,
             }
 
-            df_country["sentiment_norm"] = df_country["sentiment"].apply(normalize_sentiment)
+            if is_competencia:
+                df_country["sentiment_norm"] = "NEUTRO"
+            else:
+                if "sentiment" not in df_country.columns:
+                    df_country["sentiment"] = "NEUTRO"
+                df_country["sentiment_norm"] = df_country["sentiment"].apply(normalize_sentiment)
 
             for sentiment_label in ["POSITIVO (PROACTIVO)", "POSITIVO", "NEGATIVO", "NEUTRO"]:
 
