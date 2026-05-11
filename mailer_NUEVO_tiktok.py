@@ -190,26 +190,30 @@ def format_email_html(df, window_label, competencia_df=None):
                 sin_tema = df_sent[df_sent["tema"].fillna("") == ""]
 
                 # === CON TEMA ===
-                for tema, grupo in con_tema.groupby("tema"):
-
-                    grupo = grupo.copy()
-
+                # Pre-calcular tier_order para poder ordenar grupos
+                con_tema = con_tema.copy()
+                con_tema["tier_order"] = (
+                    con_tema["tier"]
+                    .fillna("").astype(str)
+                    .str.extract(r'(\d+)')[0]
+                    .astype(float).fillna(99)
+                )
+                
+                # Ordenar grupos de tema por el tier mínimo dentro de cada grupo
+                tema_tier_order = con_tema.groupby("tema")["tier_order"].min().sort_values()
+                
+                for tema in tema_tier_order.index:
+                    grupo = con_tema[con_tema["tema"] == tema].copy()
+                
                     grupo["prioridad_flag"] = grupo["prioridad"].fillna("").astype(str).str.strip() != ""
-
-                    grupo["tier_order"] = (
-                        grupo["tier"]
-                        .fillna("")
-                        .astype(str)
-                        .str.extract(r'(\d+)')[0]
-                        .astype(float)
-                        .fillna(99)
-                    )
-
+                
+                    # tier_order ya está calculado, no hace falta recalcular
                     grupo = grupo.sort_values(
                         by=["prioridad_flag", "tier_order"],
                         ascending=[False, True]
                     )
-
+                   
+                
                     principal = grupo.iloc[0]
                     secundarias = grupo.iloc[1:]
 
