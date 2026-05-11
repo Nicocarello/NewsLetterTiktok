@@ -204,7 +204,10 @@ def format_email_html(df, window_label, competencia_df=None):
                     return 99
                 
                 df_sent["tier_order"] = df_sent["tier"].apply(get_tier_order)
-                df_sent["prioridad_flag"] = df_sent.get("prioridad", "").fillna("").astype(str).str.strip() != ""
+                if "prioridad" in df_sent.columns:
+                    df_sent["prioridad_flag"] = df_sent["prioridad"].fillna("").astype(str).str.strip() != ""
+                else:
+                    df_sent["prioridad_flag"] = False
                 
                 df_sent = df_sent.sort_values(
                     by=["tier_order", "prioridad_flag"],
