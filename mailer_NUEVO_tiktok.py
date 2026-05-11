@@ -195,19 +195,20 @@ def format_email_html(df, window_label, competencia_df=None):
             
                 df_sent = df_country[df_country["sentiment_norm"] == sentiment_label].copy()
 
-                # ORDEN POR TIER
                 def get_tier_order(val):
                     v = clean_value(val).lower()
-                    if "1" in v:
-                        return 0
-                    if "2" in v:
-                        return 1
-                    if "3" in v:
-                        return 2
+                    m = re.search(r'\b([123])\b', v)
+                    if m:
+                        return int(m.group(1))
                     return 99
                 
                 df_sent["tier_order"] = df_sent["tier"].apply(get_tier_order)
-                df_sent = df_sent.sort_values(by=["tier_order"])
+                df_sent["prioridad_flag"] = df_sent.get("prioridad", "").fillna("").astype(str).str.strip() != ""
+                
+                df_sent = df_sent.sort_values(
+                    by=["tier_order", "prioridad_flag"],
+                    ascending=[True, False]
+                )
             
                 con_tema = df_sent[df_sent["tema"] != ""]
                 sin_tema = df_sent[df_sent["tema"] == ""]
@@ -215,12 +216,19 @@ def format_email_html(df, window_label, competencia_df=None):
                 for tema, grupo in con_tema.groupby("tema"):
             
                     grupo = grupo.copy()
-            
+
                     if "prioridad" not in grupo.columns:
                         grupo["prioridad"] = ""
-            
+                    
+                    if "tier_order" not in grupo.columns:
+                        grupo["tier_order"] = grupo["tier"].apply(get_tier_order)
+                    
                     grupo["prioridad_flag"] = grupo["prioridad"].fillna("").astype(str).str.strip() != ""
-                    grupo = grupo.sort_values(by="prioridad_flag", ascending=False)
+                    
+                    grupo = grupo.sort_values(
+                        by=["tier_order", "prioridad_flag"],
+                        ascending=[True, False]
+                    )
             
                     principal = grupo.iloc[0]
                     secundarias = grupo.iloc[1:]
