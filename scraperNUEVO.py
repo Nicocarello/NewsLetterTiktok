@@ -410,9 +410,11 @@ final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_k
 # ---------------------------
 # Filtro robusto (keep only rows mentioning TikTok)
 # ---------------------------
+# Los links de este actor son URLs de Google News RSS, por lo que article_body
+# siempre queda vacío. Se filtra por title + snippet en su lugar.
 mask = (
-    # final_df.get('title', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
-    # final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
+    final_df.get('title',   '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
+    final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
     final_df.get('article_body', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
 )
 before_tot = len(final_df)
