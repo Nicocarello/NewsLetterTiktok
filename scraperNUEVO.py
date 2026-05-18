@@ -68,7 +68,7 @@ COUNTRY_NAME_MAP = {
 }
 QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
-    "tik-tok,tik tok,tiktok,tiktok grooming,tiktok estafa,booktok"
+    "tik tok,tiktok argentina, tiktok chile, tiktok peru"
 ).split(",") if q.strip()]
 
 try:
