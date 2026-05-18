@@ -13,3 +13,4 @@ newspaper3k
 lxml
 nltk
 lxml_html_clean
+gspread
