@@ -188,6 +188,21 @@ for query in QUERIES:
         tasks.append({"query": query, "country": country, "run_input": run_input})
 
 logging.info("Launching %d actor runs (concurrency=%d)...", len(tasks), MAX_CONCURRENT_ACTORS)
+logging.info("Actor ID: %s", ACTOR_ID)
+logging.info("Queries: %s", QUERIES)
+logging.info("Countries (labels): %s", [COUNTRY_LABEL_MAP.get(c, c) for c in COUNTRIES])
+
+# --- Pre-flight: verify actor is reachable ---
+try:
+    actor_info = apify_client.actor(ACTOR_ID).get()
+    if actor_info:
+        logging.info("✅ Actor reachable: %s", actor_info.get("name", ACTOR_ID))
+    else:
+        logging.error("❌ Actor not found or not accessible: %s", ACTOR_ID)
+        sys.exit(1)
+except Exception as e:
+    logging.exception("❌ Could not reach actor %s. Check ACTOR_ID and APIFY_TOKEN.", ACTOR_ID)
+    sys.exit(1)
 
 def run_actor_task(task):
     query = task["query"]
@@ -203,20 +218,24 @@ def run_actor_task(task):
         return {"query": query, "country": country, "run": None, "dataset_id": None, "error": str(e)}
 
 actor_results = []
+errors_count = 0
 with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACTORS) as ex:
     futures = {ex.submit(run_actor_task, t): t for t in tasks}
     for fut in as_completed(futures):
         res = fut.result()
         if res["error"]:
-            logging.warning("Run failed for %s - %s: %s", res["country"], res["query"], res["error"])
+            errors_count += 1
+            logging.error("❌ Run FAILED [%s / '%s']: %s", res["country"], res["query"], res["error"])
             continue
         if not res["dataset_id"]:
-            # Log only limited part of run to avoid leaking secrets
-            logging.warning("No dataset generated for %s - %s", res["country"], res["query"])
+            errors_count += 1
+            logging.warning("⚠️  No dataset [%s / '%s']", res["country"], res["query"])
             continue
+        logging.info("✅ Run OK [%s / '%s'] → dataset %s", res["country"], res["query"], res["dataset_id"])
         actor_results.append(res)
 
-logging.info("Actor executions completed: %d successful / %d total", len(actor_results), len(tasks))
+logging.info("Actor executions: %d OK / %d failed / %d total",
+             len(actor_results), errors_count, len(tasks))
 
 # --- Descarga datasets en paralelo ---
 def fetch_dataset_items(entry):
@@ -246,8 +265,8 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_DATASET_FETCH) as ex:
             all_dfs.append(df)
 
 if not all_dfs:
-    logging.error("No results obtained from any country. Exiting without updating sheet.")
-    sys.exit(0)
+    logging.error("❌ No results from any actor run. Errors: %d / %d tasks. Exiting.", errors_count, len(tasks))
+    sys.exit(1)
 
 # --- Build final dataframe and normalize columns ---
 final_df = pd.concat(all_dfs, ignore_index=True)
