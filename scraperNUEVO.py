@@ -56,9 +56,9 @@ COUNTRIES = [c.strip() for c in os.getenv("COUNTRIES", "ar,cl,pe").split(",") if
 
 # Mapeo de código → label exacto que acepta el actor scrapestorm
 COUNTRY_LABEL_MAP = {
-    "ar": "Argentina AR",
-    "cl": "Chile CL",
-    "pe": "Peru PE",
+    "ar": "Argentina 🇦🇷",
+    "cl": "Chile 🇨🇱",
+    "pe": "Peru 🇵🇪",
 }
 # Mapeo de código → nombre legible para la columna 'country' del Sheet
 COUNTRY_NAME_MAP = {
