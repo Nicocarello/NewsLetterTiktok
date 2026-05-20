@@ -183,7 +183,7 @@ def run_actor_task(task):
     try:
         logging.info("Executing actor %s for %s with query '%s'...", ACTOR_ID, country, query)
         run = retry(lambda: apify_client.actor(ACTOR_ID).call(run_input=run_input), max_attempts=4)
-        dataset_id = run.get("defaultDatasetId")
+        dataset_id = getattr(run, "defaultDatasetId", None)  # ← fix aquí
         return {"query": query, "country": country, "run": run, "dataset_id": dataset_id, "error": None}
     except Exception as e:
         logging.exception("Error running actor for %s with query '%s'.", country, query)
