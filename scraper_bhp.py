@@ -67,7 +67,7 @@ QUERIES = [q.strip() for q in os.getenv(
 
     "QUERIES",
     "BHP Argentina,BHP Group Argentina,Proyecto Vicuña,"
-    "Filo del Sol Argentina,Lundin Mining,Vicuña bhp"
+    "Filo del Sol Argentina,Lundin Mining,Vicuña bhp,"
     "minería Argentina,RIGI minería,Vicuña corp,"
     "San Juan minería,Mendoza minería,CAEM Argentina,BHP,Filo Corp"
 
@@ -203,7 +203,7 @@ MONITORING_TERMS = [
     "Luis Lucero", "Pablo Quirno", "RIGI", "Ley Bases", "Secretaría de Minería",
     "Secretaria de Mineria", "COFEMIN", "OFEMI", "retenciones minería",
     "retenciones mineria", "cepo", "dólar exportador", "dolar exportador",
-    "minería exportador", "mineria exportador", "ley de glaciares"
+    "minería exportador", "mineria exportador", "ley de glaciares",
 
     # Minería en general
     "minería Argentina", "mineria Argentina", "cobre Argentina", "litio Argentina",
@@ -243,7 +243,7 @@ def contains_any_monitoring_keyword(text):
 EXCLUDED_TERMS = [
     "Benjamin Vicuña",
     "Benjamín Vicuña",
-    "Benjamin Vicuña",  # por si llega sin tilde
+    "Benjamin Vicuña",  
 ]
 
 EXCLUDED_TERMS_NORMALIZED = [normalize_for_match(t) for t in EXCLUDED_TERMS]
