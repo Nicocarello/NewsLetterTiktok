@@ -256,7 +256,7 @@ else:
 final_df = safe_convert_date_col(final_df, 'date_utc')
 
 # Ensure additional columns exist (we'll store classification in 'tag')
-for col in ('tag', 'semana', 'article_body', 'sentiment'):
+for col in ('tag', 'semana', 'sentiment'):
     if col not in final_df.columns:
         final_df[col] = ''
 
@@ -342,33 +342,13 @@ def fetch_and_parse(url):
     time.sleep(REQUEST_SLEEP_BETWEEN)
     return k, body
 
-links = final_df.get('link', pd.Series([], dtype=str)).dropna().astype(str).unique().tolist()
-logging.info("Starting article fetch: %d unique links (cache hits: %d)", len(links), sum(1 for l in links if url_key(l) in article_cache))
-
-link_to_body = {}
-with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
-    futures = {ex.submit(fetch_and_parse, url): url for url in links}
-    for fut in as_completed(futures):
-        url = futures[fut]
-        try:
-            k, body = fut.result()
-            link_to_body[k] = body or ''
-        except Exception as e:
-            logging.warning("Error fetching/parsing %s: %s", url, e)
-            link_to_body[url] = ''
-
-save_cache(CACHE_PATH, article_cache)
-
-final_df['link'] = final_df['link'].astype(str).apply(normalize_link)
-final_df['article_body'] = final_df['link'].map(lambda u: link_to_body.get(url_key(u), '')).fillna('')
-
 # ---------------------------
 # Filtro robusto (keep only rows mentioning TikTok)
 # ---------------------------
+
 mask = (
-    # final_df.get('title', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
-    # final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
-    final_df.get('article_body', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
+    final_df.get('title', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
+    final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
 )
 before_tot = len(final_df)
 final_df = final_df[mask].copy()
