@@ -504,60 +504,55 @@ except Exception:
 # Wrapper para llamar al modelo con retry y parsing defensivo
 def _call_model_with_retry(prompt, max_attempts=3):
     return retry(lambda: model.generate_content(prompt), max_attempts=max_attempts)
-
+    
 def categorize_text_with_model(texto):
-    """
-    Calls the LLM under a concurrency semaphore and parses defensively.
-    """
     try:
         if model is None:
-            logging.debug("Model not initialized — returning fallback category")
             return "Corporate Reputation"
 
         prompt = build_prompt_from_text(texto)
 
-        # ensure concurrency limit for LLM
         with llm_semaphore:
             def call():
-                try:
-                    return model.generate_content(prompt, temperature=0, max_output_tokens=20)
-                except TypeError:
-                    return model.generate_content(prompt)
+                config = genai.types.GenerationConfig(
+                    temperature=0,
+                    max_output_tokens=20
+                )
+                return model.generate_content(prompt, generation_config=config)
+            
             try:
                 resp = retry(call, max_attempts=3)
             except Exception as e:
-                logging.warning("Model call failed after retries (sanitized): %s", e)
+                logging.warning("Model call failed: %s", e)
                 return "Corporate Reputation"
 
         raw = ""
         try:
             raw = getattr(resp, "text", None) or ""
         except Exception:
-            raw = ""
+            pass
 
         if not raw:
             try:
                 cand = getattr(resp, "candidates", None)
-                if cand and len(cand) > 0:
-                    raw = getattr(cand[0], "content", "") or str(cand[0])
+                if cand:
+                    raw = str(cand[0])
             except Exception:
                 raw = str(resp)
 
         raw = (raw or "").strip()
-
-        # Quick sanity checks for system-style replies; fallback if suspicious
         lower_raw = raw.lower()
-        if raw.startswith("(") or lower_raw.startswith("por favor") or "proporciona la noticia" in lower_raw:
-            logging.warning("Model returned a system/clarification message; using fallback category.")
+
+        if not raw or raw.startswith("(") or "proporciona" in lower_raw:
             return "Corporate Reputation"
 
-        cat = normalize_category_from_model_output(raw)
-        if cat == "Corporate Reputation" and raw.upper() not in [c.upper() for c in CANONICAL_CATEGORIES]:
-            logging.debug("Model returned unmapped raw output (sanitized).")
-        return cat
+        # Log para debug (solo primeros caracteres)
+        logging.debug("Model raw output: %.80s", raw)
+
+        return normalize_category_from_model_output(raw)
 
     except Exception as e:
-        logging.warning("Error categorizing text with model: %s", e)
+        logging.warning("Error categorizing: %s", e)
         return "Corporate Reputation"
 
 def categorize_row_obtaining_text(row):
