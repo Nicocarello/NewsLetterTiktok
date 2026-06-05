@@ -559,43 +559,38 @@ def categorize_row_obtaining_text(row):
     url = normalize_link((row.get("link") or "").strip())
     k = url_key(url)
 
-    # Cache hit
     with tag_cache_lock:
         if k and k in tag_cache:
             return tag_cache[k]
 
+    # Usar title + snippet directamente (el body casi siempre está vacío)
+    title = (row.get("title") or "").strip()
+    snippet = (row.get("snippet") or "").strip()
     body = (row.get("article_body") or "").strip()
-    if not body and url:
+
+    # Combinar lo que haya disponible
+    texto = " | ".join(filter(None, [title, snippet, body]))
+
+    # Solo intentar fetch si no tenemos nada
+    if not texto and url:
         try:
             html = fetch_html_with_retries(url)
             if html:
-                body = extract_body_from_html(url, html)
-        except Exception:
-            body = ""
-
-    if not body and url:
-        try:
-            resp = session.get(url, timeout=REQUEST_TIMEOUT)
-            if resp.status_code == 200 and resp.text:
-                soup = BeautifulSoup(resp.text, "html.parser")
-                paragraphs = [p.get_text(separator=" ", strip=True) for p in soup.find_all("p")]
-                body = " ".join(paragraphs)
-        except Exception:
-            body = ""
-
-    category = categorize_text_with_model(body)
-
-    if k:
-        try:
-            with tag_cache_lock:
-                tag_cache[k] = category
+                texto = extract_body_from_html(url, html)
         except Exception:
             pass
+
+    category = categorize_text_with_model(texto)
+
+    if k:
+        with tag_cache_lock:
+            tag_cache[k] = category
 
     return category
 
 # Ejecutar clasificación en paralelo
-rows_to_categorize = final_df.reset_index()[["index", "link", "article_body"]].to_dict(orient="records")
+#rows_to_categorize = final_df.reset_index()[["index", "link", "article_body"]].to_dict(orient="records")
+rows_to_categorize = final_df.reset_index()[["index", "link", "article_body", "title", "snippet"]].to_dict(orient="records")
 logging.info("Starting category classification for %d rows (workers=%d)...", len(rows_to_categorize), MAX_FETCH_WORKERS)
 
 categories_map = {}
