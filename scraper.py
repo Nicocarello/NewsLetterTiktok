@@ -546,7 +546,6 @@ def categorize_row_obtaining_text(row):
     # Usar title + snippet directamente (el body casi siempre está vacío)
     title = (row.get("title") or "").strip()
     snippet = (row.get("snippet") or "").strip()
-    body = (row.get("article_body") or "").strip()
 
     # Combinar lo que haya disponible
     texto = " | ".join(filter(None, [title, snippet, body]))
@@ -569,8 +568,7 @@ def categorize_row_obtaining_text(row):
     return category
 
 # Ejecutar clasificación en paralelo
-#rows_to_categorize = final_df.reset_index()[["index", "link", "article_body"]].to_dict(orient="records")
-rows_to_categorize = final_df.reset_index()[["index", "link", "article_body", "title", "snippet"]].to_dict(orient="records")
+rows_to_categorize = final_df.reset_index()[["index", "link", "title", "snippet"]].to_dict(orient="records")
 logging.info("Starting category classification for %d rows (workers=%d)...", len(rows_to_categorize), MAX_FETCH_WORKERS)
 
 categories_map = {}
