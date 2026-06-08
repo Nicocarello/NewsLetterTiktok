@@ -2,7 +2,7 @@ name: Daily TikTok Mailer
 
 on:
   schedule:
-    - cron: '0 13 * * *'  # 10:00 AM Argentina (UTC-3)
+    - cron: '0 12 * * *'  # 10:00 AM Argentina (UTC-3)
   workflow_dispatch:
 
 jobs:
@@ -27,4 +27,4 @@ jobs:
           EMAIL_USER_TIKTOK: ${{ secrets.EMAIL_USER_TIKTOK }}
           EMAIL_PASS_TIKTOK: ${{ secrets.EMAIL_PASS_TIKTOK }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-        run: python mailer_NUEVO_tiktok.py
+        #run: python mailer_NUEVO_tiktok.py
