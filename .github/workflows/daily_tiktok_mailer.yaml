@@ -2,7 +2,7 @@ name: Daily TikTok Mailer
 
 on:
   schedule:
-    - cron: '0 12 * * *'  # 10:00 AM Argentina (UTC-3)
+    - cron: '0 13 * * 1-5'   # 10:00 AM Argentina (UTC-3), lunes a viernes
   workflow_dispatch:
 
 jobs:
