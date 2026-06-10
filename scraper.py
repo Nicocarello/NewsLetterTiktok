@@ -559,7 +559,7 @@ def categorize_row_obtaining_text(row):
         except Exception:
             pass
 
-    category = categorize_text_with_model(texto)
+    #category = categorize_text_with_model(texto)
 
     if k:
         with tag_cache_lock:
