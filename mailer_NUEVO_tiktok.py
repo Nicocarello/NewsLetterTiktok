@@ -272,7 +272,7 @@ def send_email(subject, body):
     #recipients = ["victoria.arrudi@publicalatam.com"]
     recipients = ["victoria.arrudi@publicalatam.com", "luz@publicalatam.com", "sofia.szekasy@publicalatam.com", "ezequiel@publicalatam.com", "matias@publicalatam.com", "sol.lopatin@publicalatam.com",
                  "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com","german.nissen@bytedance.com", "german.nissen@tiktok.com", "hernan@quipuadvisors.com", "nadu.gonzalez@gmail.com",
-                 "nicolas.sforzini@tiktok.com", "nicolas@quipuadvisors.com", "pri.pagliuso@bytedance.com", "tabakmansebastian@gmail.com", "seba.gombi@gmail.com", "germannissen@hotmail.com",
+                 "nicolas.sforzini@tiktok.com", "nicolas@quipuadvisors.com", "pri.pagliuso@bytedance.com", "tabakmansebastian@gmail.com", "germannissen@hotmail.com",
                   "rosariolanda@bytedance.com", "mercedes.serra@bytedance.com", "magdalena.garcia@bytedance.com", "lucia.dranuta@bytedance.com", "agustina.palluotto@bytedance.com"
                  ]
 
