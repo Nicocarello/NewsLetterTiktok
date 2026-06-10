@@ -567,34 +567,8 @@ def categorize_row_obtaining_text(row):
 
     return category
 
-# Ejecutar clasificación en paralelo
-rows_to_categorize = final_df.reset_index()[["index", "link", "title", "snippet"]].to_dict(orient="records")
-logging.info("Starting category classification for %d rows (workers=%d)...", len(rows_to_categorize), MAX_FETCH_WORKERS)
-
-categories_map = {}
-with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
-    futures = {ex.submit(categorize_row_obtaining_text, r): r for r in rows_to_categorize}
-    for fut in as_completed(futures):
-        r = futures[fut]
-        try:
-            category = fut.result()
-        except Exception as e:
-            logging.warning("Error classifying row (link=%s): %s", r.get("link"), e)
-            category = "Corporate Reputation"
-        categories_map[r["index"]] = category
-
-# Asignar resultado en 'tag'
-final_df = final_df.reset_index()
-final_df["tag"] = final_df["index"].map(lambda i: categories_map.get(i, "Corporate Reputation"))
-final_df = final_df.drop(columns=["index"]).reset_index(drop=True)
-
-logging.info("Category classification completed. Distribution: %s", final_df["tag"].value_counts().to_dict())
-
-# Persistir tag cache atomically
-try:
-    atomic_write_json(CATEGORY_CACHE_PATH, tag_cache)
-except Exception as e:
-    logging.warning("Could not save category cache: %s", e)
+logging.info("Skipping category classification. Tag column will be empty.")
+final_df["tag"] = ""
 
 # ---------------------------
 # SENTIMENT CLASSIFICATION (POSITIVO / NEGATIVO / NEUTRO) - using Gemini
