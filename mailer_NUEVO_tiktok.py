@@ -303,8 +303,8 @@ if __name__ == "__main__":
 
     body = format_email_html(filtered, window_label, comp_filtered)
 
-    #subject = f"Newsletter TikTok ({window_label})"
-    subject = f"Newsletter TikTok (12/05/2026 09:00 - 16/05/2026 09:00)"
+    subject = f"Newsletter TikTok ({window_label})"
+    #subject = f"Newsletter TikTok (12/05/2026 09:00 - 16/05/2026 09:00)"
 
     send_email(subject, body)
 
