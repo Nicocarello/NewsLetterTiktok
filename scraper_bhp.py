@@ -244,6 +244,7 @@ EXCLUDED_TERMS = [
     "Benjamin Vicuña",
     "Benjamín Vicuña",
     "Benjamin Vicuña",  
+    "messi"
 ]
 
 EXCLUDED_TERMS_NORMALIZED = [normalize_for_match(t) for t in EXCLUDED_TERMS]
