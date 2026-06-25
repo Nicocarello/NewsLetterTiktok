@@ -143,7 +143,7 @@ def normalize_link(url):
     if not url:
         return ''
     url = str(url).strip()
-    #url = re.sub(r'(/amp/?|=amp|=amp-type|?outputType=amp-type|\.amp)$', '', url)   # quita /amp o /amp/ o =amp al final
+    #url = re.sub(r'(/amp/?|=amp|=amp-type|?outputType|?outputType=amp-type|\.amp)$', '', url)   # quita /amp o /amp/ o =amp al final
     url = re.sub(
         r'(/amp/?|=amp|=amp-type|\?outputType=amp-type|\.amp)$',
         '',
