@@ -55,7 +55,7 @@ if not APIFY_TOKEN:
 COUNTRIES = [c.strip() for c in os.getenv("COUNTRIES", "ar,cl,pe").split(",") if c.strip()]
 QUERIES = [q.strip() for q in os.getenv(
     "QUERIES",
-    "tiktok,tiktok grooming,tik tok,tiktok chile,tiktok peru"
+    "tiktok,tiktok grooming,tik tok"
 ).split(",") if q.strip()]
 
 try:
