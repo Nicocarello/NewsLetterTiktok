@@ -273,7 +273,10 @@ MAX_FETCH_WORKERS = int(os.getenv("MAX_FETCH_WORKERS", "3"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "15"))
 REQUEST_RETRIES = int(os.getenv("REQUEST_RETRIES", "2"))
 REQUEST_SLEEP_BETWEEN = float(os.getenv("REQUEST_SLEEP_BETWEEN", "0.2"))
-TIKTOK_PATTERN = re.compile(r"tik\s*-?\s*tok", flags=re.IGNORECASE)
+#TIKTOK_PATTERN = re.compile(r"tik\s*-?\s*tok", flags=re.IGNORECASE)
+TIKTOK_PATTERN = re.compile(r"tik\s*-?\s*tok(er)?|redes?\s+sociales?", flags=re.IGNORECASE)
+
+
 
 def load_cache(path):
     if os.path.exists(path):
