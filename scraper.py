@@ -138,14 +138,13 @@ def safe_convert_date_col(df, col='date_utc'):
     except Exception:
         df[col] = df[col].astype(str).fillna('')
     return df
-
+    
 def normalize_link(url):
     if not url:
         return ''
     url = str(url).strip()
-    #url = re.sub(r'(/amp/?|=amp|=amp-type|?outputType|?outputType=amp-type|\.amp)$', '', url)   # quita /amp o /amp/ o =amp al final
     url = re.sub(
-        r'(/amp/?|=amp|=amp-type|\?outputType=amp-type|\.amp)$',
+        r'(/amp/?|=amp|=amp-type|\?outputType|\?outputType=amp-type|\.amp|/)$',
         '',
         url
     )
