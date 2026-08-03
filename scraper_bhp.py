@@ -681,6 +681,29 @@ else:
 
 final_df = safe_convert_date_col(final_df, "date_utc")
 
+# ---------------------------
+# Filtro por fecha: solo noticias de HOY o AYER (hora Argentina)
+# ---------------------------
+_today_ar = datetime.now(TZ_ARGENTINA).date()
+_yesterday_ar = _today_ar - pd.Timedelta(days=1)
+_allowed_dates = {
+    _today_ar.strftime("%d/%m/%Y"),
+    _yesterday_ar.strftime("%d/%m/%Y"),
+}
+
+_before_date_filter = len(final_df)
+final_df = final_df[final_df["date_utc"].isin(_allowed_dates)].copy()
+_after_date_filter = len(final_df)
+logging.info(
+    "Filtro de fecha (hoy=%s, ayer=%s): %d -> %d rows (removidas %d por no ser de hoy/ayer)",
+    _today_ar.strftime("%d/%m/%Y"), _yesterday_ar.strftime("%d/%m/%Y"),
+    _before_date_filter, _after_date_filter, _before_date_filter - _after_date_filter
+)
+
+if final_df.empty:
+    logging.info("No quedaron noticias de hoy/ayer tras el filtro de fecha. Finalizando sin tocar la sheet.")
+    sys.exit(0)
+
 for col in ("tag", "article_body"):
     if col not in final_df.columns:
         final_df[col] = ""
