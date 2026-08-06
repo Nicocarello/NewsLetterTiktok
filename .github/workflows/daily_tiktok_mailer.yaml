@@ -27,4 +27,4 @@ jobs:
           EMAIL_USER_TIKTOK: ${{ secrets.EMAIL_USER_TIKTOK }}
           EMAIL_PASS_TIKTOK: ${{ secrets.EMAIL_PASS_TIKTOK }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-        #run: python mailer_NUEVO_tiktok.py
+        run: python mailer_NUEVO_tiktok.py
