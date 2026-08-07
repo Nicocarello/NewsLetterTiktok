@@ -21,6 +21,7 @@ import sys
 import math
 import threading
 import tempfile
+import calendar
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -95,6 +96,23 @@ article_cache_lock = threading.Lock()
 tag_cache_lock = threading.Lock()
 llm_semaphore = threading.Semaphore(LLM_MAX_CONCURRENT)
 
+# --- HTTP session (movida acá arriba: la necesitamos para resolver links de Google News
+# ANTES de la deduplicación, no solo más adelante para el fetch de body/sentiment) ---
+MAX_FETCH_WORKERS = int(os.getenv("MAX_FETCH_WORKERS", "3"))
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "15"))
+REQUEST_RETRIES = int(os.getenv("REQUEST_RETRIES", "2"))
+REQUEST_SLEEP_BETWEEN = float(os.getenv("REQUEST_SLEEP_BETWEEN", "0.2"))
+
+session = requests.Session()
+adapter = HTTPAdapter(pool_connections=20, pool_maxsize=50)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
+session.headers.update({
+    "User-Agent": os.getenv("FETCH_USER_AGENT", "Mozilla/5.0 (compatible; PublicBot/1.0; +https://publicalatam.com)"),
+    "Accept-Language": "es-ES,es;q=0.9,en;q=0.8"
+})
+
+
 def atomic_write_json(path, data):
     # Write to temp and replace atomically
     dirpath = os.path.dirname(path) or '.'
@@ -109,6 +127,7 @@ def atomic_write_json(path, data):
             pass
     except Exception as e:
         logging.warning("atomic_write_json failed for %s: %s", path, e)
+
 
 # --- Helpers: backoff retry (reusable) ---
 def retry(fn, max_attempts=5, base_delay=1.5, max_delay=60, jitter=0.4, *args, **kwargs):
@@ -127,6 +146,7 @@ def retry(fn, max_attempts=5, base_delay=1.5, max_delay=60, jitter=0.4, *args, *
                             getattr(fn, "__name__", str(fn)), attempt, max_attempts, e, sleep_for)
             time.sleep(sleep_for)
 
+
 def safe_convert_date_col(df, col='date_utc'):
     if col not in df.columns:
         df[col] = ''
@@ -138,7 +158,8 @@ def safe_convert_date_col(df, col='date_utc'):
     except Exception:
         df[col] = df[col].astype(str).fillna('')
     return df
-    
+
+
 def normalize_link(url):
     if not url:
         return ''
@@ -150,8 +171,7 @@ def normalize_link(url):
     )
     return url
 
-# Optional helper
-import calendar
+
 def format_week_range(date_str):
     if not date_str or pd.isna(date_str):
         return ''
@@ -163,6 +183,80 @@ def format_week_range(date_str):
         return f"{monday.day:02d}–{sunday.day:02d} {month_abbr} {monday.year}"
     except Exception:
         return ''
+
+
+# ---------------------------
+# Fallback: resolver links de Google News que el actor no pudo resolver
+# ---------------------------
+def is_unresolved_google_link(url):
+    """True si el link es un redirect de Google News sin resolver (news.google.com o /goto?url=)."""
+    if not url:
+        return False
+    return 'news.google.com' in url or '/goto?url=' in url
+
+
+def resolve_google_news_link(url, http_session, timeout=10):
+    """
+    Resuelve un link /goto?url=... o /rss/articles/... de Google News a la URL real
+    del publisher, usando el mismo endpoint interno (batchexecute) que usa el cliente
+    web de Google News. No requiere ejecutar JS.
+
+    Si algo falla en el camino, devuelve la URL original tal cual vino (fail-safe).
+    """
+    try:
+        match = re.search(r'articles/([^?]+)', url) or re.search(r'url=([^&]+)', url)
+        if not match:
+            return url
+        article_id = match.group(1)
+
+        # 1) Obtener signature y timestamp de la página del artículo
+        article_url = f'https://news.google.com/articles/{article_id}'
+        resp = http_session.get(article_url, timeout=timeout)
+        if resp.status_code != 200:
+            return url
+
+        sg_match = re.search(r'data-n-a-sg="([^"]+)"', resp.text)
+        ts_match = re.search(r'data-n-a-ts="([^"]+)"', resp.text)
+        if not sg_match or not ts_match:
+            return url
+
+        signature, timestamp = sg_match.group(1), ts_match.group(1)
+
+        # 2) Llamar al endpoint batchexecute con esos parámetros
+        inner = json.dumps([
+            "garturlreq",
+            [["en-US", "US", ["FINANCE_TOP_INDICES", "WEB_TEST_1_0_0"], None, None, 1, 1,
+              "US:en", None, 180, None, None, None, None, None, 0, None, None,
+              [1608992183, 723341000]], "en-US", "US", 1, [2, 3, 4, 8], 1, 0, "655000234", 0, 0, None, 0],
+            article_id, timestamp, signature
+        ])
+        payload = [[["Fbv4je", inner, None, "generic"]]]
+        body = 'f.req=' + requests.utils.quote(json.dumps(payload))
+
+        be_resp = http_session.post(
+            'https://news.google.com/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je',
+            data=body,
+            headers={
+                'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+                'Referer': 'https://news.google.com/'
+            },
+            timeout=timeout
+        )
+
+        # 3) Parsear la respuesta (JSON anidado con prefijo raro) y extraer la URL real
+        header = '["garturlres","'
+        start = be_resp.text.find(header)
+        if start == -1:
+            return url
+        start += len(header)
+        end = be_resp.text.find('"', start)
+        decoded = be_resp.text[start:end]
+        return decoded if decoded else url
+
+    except Exception as e:
+        logging.debug("No se pudo resolver fallback de Google News %s: %s", url, e)
+        return url
+
 
 # --- Parallel actor execution (build task list: query x country) ---
 tasks = []
@@ -180,6 +274,7 @@ for query in QUERIES:
 
 logging.info("Launching %d actor runs (concurrency=%d)...", len(tasks), MAX_CONCURRENT_ACTORS)
 
+
 def run_actor_task(task):
     query = task["query"]
     country = task["country"]
@@ -196,6 +291,7 @@ def run_actor_task(task):
         logging.exception("Error running actor for %s with query '%s'.", country, query)
         return {"query": query, "country": country, "run": None, "dataset_id": None, "error": str(e)}
 
+
 actor_results = []
 with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACTORS) as ex:
     futures = {ex.submit(run_actor_task, t): t for t in tasks}
@@ -205,12 +301,12 @@ with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACTORS) as ex:
             logging.warning("Run failed for %s - %s: %s", res["country"], res["query"], res["error"])
             continue
         if not res["dataset_id"]:
-            # Log only limited part of run to avoid leaking secrets
             logging.warning("No dataset generated for %s - %s", res["country"], res["query"])
             continue
         actor_results.append(res)
 
 logging.info("Actor executions completed: %d successful / %d total", len(actor_results), len(tasks))
+
 
 # --- Descarga datasets en paralelo ---
 def fetch_dataset_items(entry):
@@ -231,6 +327,7 @@ def fetch_dataset_items(entry):
         logging.exception("Error listing items for dataset %s.", dataset_id)
         return None
 
+
 all_dfs = []
 with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_DATASET_FETCH) as ex:
     futures = {ex.submit(fetch_dataset_items, r): r for r in actor_results}
@@ -247,6 +344,30 @@ if not all_dfs:
 final_df = pd.concat(all_dfs, ignore_index=True)
 
 if 'link' in final_df.columns:
+    final_df['link'] = final_df['link'].apply(normalize_link)
+
+    # ---------------------------
+    # FALLBACK: resolver los links que el actor dejó sin resolver
+    # (mismo actor que en Apify — a veces no logra resolver el redirect
+    # de Google News para ciertos publishers y devuelve el link crudo)
+    # ---------------------------
+    unresolved_mask = final_df['link'].apply(is_unresolved_google_link)
+    n_unresolved = int(unresolved_mask.sum())
+
+    if n_unresolved > 0:
+        logging.info("El actor no resolvió %d de %d links; aplicando fallback batchexecute...",
+                     n_unresolved, len(final_df))
+
+        def _resolve_row(link):
+            return resolve_google_news_link(link, session) if is_unresolved_google_link(link) else link
+
+        with ThreadPoolExecutor(max_workers=MAX_FETCH_WORKERS) as ex:
+            resolved_links = list(ex.map(_resolve_row, final_df.loc[unresolved_mask, 'link'].tolist()))
+        final_df.loc[unresolved_mask, 'link'] = resolved_links
+
+        still_unresolved = int(final_df['link'].apply(is_unresolved_google_link).sum())
+        logging.info("Fallback completado. Links sin resolver restantes: %d", still_unresolved)
+
     final_df['link'] = final_df['link'].apply(normalize_link)
     final_df.drop_duplicates(subset=["link"], inplace=True)
 else:
@@ -291,13 +412,7 @@ except Exception:
 
 # --- Article fetch + parse w/ Session + ThreadPool (cache simple) ---
 CACHE_PATH = os.getenv("ARTICLE_CACHE_PATH", "article_cache.json")
-MAX_FETCH_WORKERS = int(os.getenv("MAX_FETCH_WORKERS", "3"))
-REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "15"))
-REQUEST_RETRIES = int(os.getenv("REQUEST_RETRIES", "2"))
-REQUEST_SLEEP_BETWEEN = float(os.getenv("REQUEST_SLEEP_BETWEEN", "0.2"))
-#TIKTOK_PATTERN = re.compile(r"tik\s*-?\s*tok", flags=re.IGNORECASE)
 TIKTOK_PATTERN = re.compile(r"tik\s*-?\s*tok(er)?|redes?\s+sociales?", flags=re.IGNORECASE)
-
 
 
 def load_cache(path):
@@ -309,26 +424,20 @@ def load_cache(path):
             return {}
     return {}
 
+
 def save_cache(path, data):
     try:
         atomic_write_json(path, data)
     except Exception as e:
         logging.warning("Could not save cache to %s: %s", path, e)
 
+
 article_cache = load_cache(CACHE_PATH)
+
 
 def url_key(u):
     return normalize_link(u)
 
-# Configure session with adapter and moderate pool sizes
-session = requests.Session()
-adapter = HTTPAdapter(pool_connections=20, pool_maxsize=50)
-session.mount("http://", adapter)
-session.mount("https://", adapter)
-session.headers.update({
-    "User-Agent": os.getenv("FETCH_USER_AGENT", "Mozilla/5.0 (compatible; PublicBot/1.0; +https://publicalatam.com)"),
-    "Accept-Language": "es-ES,es;q=0.9,en;q=0.8"
-})
 
 def fetch_html_with_retries(url):
     for attempt in range(REQUEST_RETRIES + 1):
@@ -342,6 +451,7 @@ def fetch_html_with_retries(url):
         time.sleep(0.5 + REQUEST_SLEEP_BETWEEN * attempt)
     return None
 
+
 def extract_body_from_html(url, html):
     try:
         art = Article(url, language='es')
@@ -351,6 +461,7 @@ def extract_body_from_html(url, html):
     except Exception as e:
         logging.debug("newspaper parse failed for %s: %s", url, e)
         return ''
+
 
 def fetch_and_parse(url):
     k = url_key(url)
@@ -363,14 +474,13 @@ def fetch_and_parse(url):
     body = extract_body_from_html(url, html) if html else ''
     with article_cache_lock:
         article_cache[k] = body
-    # small polite sleep
     time.sleep(REQUEST_SLEEP_BETWEEN)
     return k, body
+
 
 # ---------------------------
 # Filtro robusto (keep only rows mentioning TikTok)
 # ---------------------------
-
 mask = (
     final_df.get('title', '').astype(str).str.contains(TIKTOK_PATTERN, na=False) |
     final_df.get('snippet', '').astype(str).str.contains(TIKTOK_PATTERN, na=False)
@@ -418,6 +528,7 @@ NORMALIZATION_MAP = {
     "GOVERNMENT": "Corporate Reputation",
 }
 
+
 def normalize_category_from_model_output(raw_text):
     if not raw_text:
         return "Corporate Reputation"
@@ -437,6 +548,7 @@ def normalize_category_from_model_output(raw_text):
             return can
     logging.warning("Model output not mappable to a category (sanitized).")
     return "Corporate Reputation"
+
 
 def build_prompt_from_text(texto):
     max_chars = 12000
@@ -473,13 +585,12 @@ CATEGORÍAS DISPONIBLES (elige SOLO UNA)
 - Corporate Reputation
 
 REGLA DE PRIORIDAD (OBLIGATORIA)
-Si la noticia impacta la imagen institucional, legal o regulatoria de la empresa,
-la categoría SIEMPRE es: Corporate Reputation.
+Si la noticia impacta la imagen institucional, legal o regulatoria de la empresa, la categoría SIEMPRE es: Corporate Reputation.
 
 INSTRUCCIONES CRÍTICAS (LEER ATENTAMENTE)
 1) ANALIZA la noticia provista abajo.
-2) RESPONDE EXACTAMENTE con UNA de las siguientes cadenas (sin comillas, sin punto final, sin texto extra, sin explicación): 
-   {allowed_line}
+2) RESPONDE EXACTAMENTE con UNA de las siguientes cadenas (sin comillas, sin punto final, sin texto extra, sin explicación):
+    {allowed_line}
 3) RESPONDE SOLO con la cadena EXACTA: por ejemplo: Product  (sin comillas)
 4) Si por alguna razón NO PUEDES CLASIFICAR (texto ausente o incompleto), RESPONDE EXACTAMENTE: Corporate Reputation
 5) NO agregues ninguna otra palabra, puntuación ni carácter.
@@ -488,6 +599,7 @@ NOTICIA:
 {t}
 """
     return prompt
+
 
 # --- Limpieza variable obsoleta si estaba presente ---
 try:
@@ -506,10 +618,11 @@ try:
 except Exception:
     tag_cache = {}
 
-# Wrapper para llamar al modelo con retry y parsing defensivo
+
 def _call_model_with_retry(prompt, max_attempts=3):
     return retry(lambda: model.generate_content(prompt), max_attempts=max_attempts)
-    
+
+
 def categorize_text_with_model(texto):
     try:
         if model is None:
@@ -524,7 +637,7 @@ def categorize_text_with_model(texto):
                     max_output_tokens=20
                 )
                 return model.generate_content(prompt, generation_config=config)
-            
+
             try:
                 resp = retry(call, max_attempts=3)
             except Exception as e:
@@ -551,7 +664,6 @@ def categorize_text_with_model(texto):
         if not raw or raw.startswith("(") or "proporciona" in lower_raw:
             return "Corporate Reputation"
 
-        # Log para debug (solo primeros caracteres)
         logging.debug("Model raw output: %.80s", raw)
 
         return normalize_category_from_model_output(raw)
@@ -559,6 +671,7 @@ def categorize_text_with_model(texto):
     except Exception as e:
         logging.warning("Error categorizing: %s", e)
         return "Corporate Reputation"
+
 
 def categorize_row_obtaining_text(row):
     url = normalize_link((row.get("link") or "").strip())
@@ -568,14 +681,11 @@ def categorize_row_obtaining_text(row):
         if k and k in tag_cache:
             return tag_cache[k]
 
-    # Usar title + snippet directamente (el body casi siempre está vacío)
     title = (row.get("title") or "").strip()
     snippet = (row.get("snippet") or "").strip()
 
-    # Combinar lo que haya disponible
-    texto = " | ".join(filter(None, [title, snippet, body]))
+    texto = " | ".join(filter(None, [title, snippet]))
 
-    # Solo intentar fetch si no tenemos nada
     if not texto and url:
         try:
             html = fetch_html_with_retries(url)
@@ -584,13 +694,14 @@ def categorize_row_obtaining_text(row):
         except Exception:
             pass
 
-    #category = categorize_text_with_model(texto)
+    category = categorize_text_with_model(texto)
 
     if k:
         with tag_cache_lock:
             tag_cache[k] = category
 
     return category
+
 
 logging.info("Skipping category classification. Tag column will be empty.")
 final_df["tag"] = ""
@@ -624,7 +735,6 @@ NOTICIA:
         {texto}
         """
 
-        # Use semaphore to control concurrency
         with llm_semaphore:
             resp = model.generate_content(prompt)
         resultado = getattr(resp, "text", "") or ""
@@ -637,10 +747,11 @@ NOTICIA:
         logging.warning("Error processing %s: %s", url, e)
         return "NEUTRO"
 
-#final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
+
+# final_df['sentiment'] = final_df['link'].apply(analizar_noticia)
 
 # Ensure column order and presence (header keeps 'tag' and 'sentiment' if you want both)
-header = ['semana', 'date_utc', 'country', 'title', 'link', 'domain','source', 'tier', 'snippet', 'tag', 'sentiment','scraped_at']
+header = ['semana', 'date_utc', 'country', 'title', 'link', 'domain', 'source', 'tier', 'snippet', 'tag', 'sentiment', 'scraped_at']
 final_df = final_df.reindex(columns=header, fill_value='')
 final_df['link'] = final_df['link'].astype(str).apply(normalize_link)
 final_df = final_df.drop_duplicates(subset='link')
@@ -648,7 +759,7 @@ final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
 # --- Read existing sheet and combine (incremental append instead of full rewrite) ---
 SHEET_RANGE = "2026!A:L"
-HEADER = ['semana', 'date_utc', 'country', 'title', 'link', 'domain','source', 'tier', 'snippet', 'tag', 'sentiment','scraped_at']
+HEADER = ['semana', 'date_utc', 'country', 'title', 'link', 'domain', 'source', 'tier', 'snippet', 'tag', 'sentiment', 'scraped_at']
 
 # 1) Read current sheet values (if any)
 try:
@@ -727,8 +838,7 @@ for row in final_df[HEADER].values.tolist():
             val = bool(cell)
         else:
             try:
-                import pandas as _pd
-                if isinstance(cell, _pd.Timestamp):
+                if isinstance(cell, pd.Timestamp):
                     if pd.isna(cell):
                         val = ''
                     else:
@@ -750,7 +860,9 @@ if new_links_count == 0 and not sheet_empty:
     sys.exit(0)
 
 # 4) Prepare batches and append with retries/backoff
-BATCH_SIZE = int(os.getenv("SHEET_BATCH_SIZE", "500"))  # adjustable
+BATCH_SIZE = int(os.getenv("SHEET_BATCH_SIZE", "500"))
+
+
 def sheets_append_batch(values_batch):
     body = {"values": values_batch}
     return sheet_service.values().append(
@@ -760,6 +872,7 @@ def sheets_append_batch(values_batch):
         insertDataOption="INSERT_ROWS",
         body=body
     ).execute()
+
 
 def append_with_retry(batch, max_attempts=5, base_delay=1.5):
     attempt = 0
@@ -782,6 +895,7 @@ def append_with_retry(batch, max_attempts=5, base_delay=1.5):
             sleep_for = min(60, base_delay * (2 ** (attempt - 1))) + random.random() * 0.5
             logging.warning("Error appending to Sheets (attempt %d/%d) — retrying in %.1fs", attempt, max_attempts, sleep_for)
             time.sleep(sleep_for)
+
 
 # if sheet empty, write header first (one-time)
 if sheet_empty:
