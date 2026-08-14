@@ -66,8 +66,8 @@ COUNTRIES = ["ar"]
 QUERIES = [q.strip() for q in os.getenv(
 
     "QUERIES",
-    "BHP Argentina,BHP Group Argentina,Proyecto Vicuña,"
-    "Filo del Sol Argentina,Lundin Mining,Vicuña bhp,"
+    "BHP Argentina,Proyecto Vicuña,"
+    "Lundin Mining,Vicuña bhp,"
     "minería Argentina,RIGI minería,Vicuña corp,"
     "San Juan minería,Mendoza minería,CAEM Argentina,Filo Corp"
 
