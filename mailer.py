@@ -280,8 +280,8 @@ def format_email_html(df, window_label, competencia_df=None):
 
 def send_email(subject, body):
     recipients = [r.strip() for r in RECIPIENTS if r.strip()]
-    recipients += ["victoria.arrudi@publicalatam.com", "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com"]
-    #recipients = ["victoria.arrudi@publicalatam.com"]
+    #recipients += ["victoria.arrudi@publicalatam.com", "bianca.rocatti@bytedance.com", "denise.estray@bytedance.com"]
+    recipients = ["victoria.arrudi@publicalatam.com"]
     if not recipients:
         print("⚠️ No hay destinatarios en EMAIL_TO.")
         return
@@ -332,7 +332,8 @@ if __name__ == "__main__":
             ]
 
     body = format_email_html(filtered, window_label, competencia_df=competencia_filtered)
-    subject = f"Newsletter TikTok ({window_label})"
+    #subject = f"Newsletter TikTok ({window_label})"
+    subject = f"Newsletter TikTok (14/08/2026 09:00 - 17/08/2026 09:00)"
 
     send_email(subject, body)
     print("✅ Email enviado correctamente.")
