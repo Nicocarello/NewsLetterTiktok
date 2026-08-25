@@ -370,6 +370,15 @@ if 'link' in final_df.columns:
 
     final_df['link'] = final_df['link'].apply(normalize_link)
     final_df.drop_duplicates(subset=["link"], inplace=True)
+
+    # Excluir links no resueltos tipo /goto?url=...
+    final_df = final_df[
+        ~final_df['link'].astype(str).str.contains(
+            r'/goto',
+            case=False,
+            na=False
+        )
+    ].copy()
 else:
     logging.warning("No 'link' column present in scraped items; duplicates won't be removed by link.")
 
