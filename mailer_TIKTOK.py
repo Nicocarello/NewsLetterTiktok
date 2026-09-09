@@ -279,11 +279,11 @@ def send_email(subject, body):
     msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
     msg["From"] = EMAIL_USER
-    msg["To"] = ", ".join(recipients)
+    msg["To"] = EMAIL_USER  # <-- CAMBIO: ya no listamos a los destinatarios acá
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(EMAIL_USER, EMAIL_PASS)
-        server.sendmail(EMAIL_USER, recipients, msg.as_string())
+        server.sendmail(EMAIL_USER, recipients, msg.as_string())  # <-- esto no cambia, acá sigue yendo la lista real
 
 # === MAIN ===
 if __name__ == "__main__":
