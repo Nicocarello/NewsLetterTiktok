@@ -2,7 +2,7 @@ name: Daily TikTok Mailer
 
 on:
   schedule:
-    - cron: '03 13 * * 1-5'
+    - cron: '57 12 * * 1-5'
   workflow_dispatch:
 
 jobs:
