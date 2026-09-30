@@ -124,6 +124,7 @@ def filter_by_window(df, now):
 COUNTRY_FLAGS = {
     "Argentina": "🇦🇷",
     "Chile": "🇨🇱",
+    "Peru": "🇵🇪",
     "Perú": "🇵🇪"
 }
 
