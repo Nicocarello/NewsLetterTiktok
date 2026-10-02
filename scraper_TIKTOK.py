@@ -412,7 +412,7 @@ for col in ('tag', 'semana', 'sentiment'):
     if col not in final_df.columns:
         final_df[col] = ''
 
-final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Peru'})
+final_df['country'] = final_df['country'].replace({'ar': 'Argentina', 'cl': 'Chile', 'pe': 'Perú'})
 
 try:
     final_df['scraped_at'] = pd.to_datetime(final_df['scraped_at'], errors='coerce').dt.strftime('%d/%m/%Y %H:%M').fillna('')
