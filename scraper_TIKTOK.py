@@ -766,6 +766,24 @@ final_df['link'] = final_df['link'].astype(str).apply(normalize_link)
 final_df = final_df.drop_duplicates(subset='link')
 final_df = final_df.drop_duplicates(subset=["title", "snippet"])
 
+# ---------------------------
+# Excluir fuentes no deseadas (ej: Flipr.news)
+# ---------------------------
+EXCLUDED_SOURCES = {"flipr.news"}
+
+_before_source_filter = len(final_df)
+final_df = final_df[
+    ~final_df['source'].astype(str).str.strip().str.lower().isin(EXCLUDED_SOURCES)
+].copy()
+logging.info(
+    "Filtro de fuentes excluidas: %d -> %d rows (removidas %d)",
+    _before_source_filter, len(final_df), _before_source_filter - len(final_df)
+)
+
+if final_df.empty:
+    logging.info("No quedaron noticias tras excluir fuentes. Finalizando sin tocar la sheet.")
+    sys.exit(0)
+
 # --- Read existing sheet and combine (incremental append instead of full rewrite) ---
 SHEET_RANGE = "2026!A:L"
 HEADER = ['semana', 'date_utc', 'country', 'title', 'link', 'domain', 'source', 'tier', 'snippet', 'tag', 'sentiment', 'scraped_at']
