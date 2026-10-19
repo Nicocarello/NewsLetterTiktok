@@ -1,8 +1,8 @@
 name: Run News Scraper
 
 on:
-  schedule:
-    - cron: "0,50 * * * *"   # cada 30 minutos
+  #schedule:
+  #  - cron: "0,50 * * * *"   # cada 30 minutos
   workflow_dispatch:      # permite correrlo manualmente también
 
 jobs:
